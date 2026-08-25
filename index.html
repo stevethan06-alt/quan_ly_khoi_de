@@ -31,6 +31,9 @@
   .mainnav button{background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:9px 14px;border-radius:7px;cursor:pointer;font-size:12.5px;font-weight:600;white-space:nowrap;}
   .mainnav button.active{background:var(--blueprint);color:var(--ink);border-color:var(--blueprint);}
   .mainnav .sep{width:1px;background:var(--line);margin:4px 4px;}
+  .schedule-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px;}
+  .schedule-tabs button{background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:7px 11px;border-radius:5px;cursor:pointer;font-size:12px;}
+  .schedule-tabs button.active{background:var(--blueprint);border-color:var(--blueprint);color:var(--ink);}
 
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px;font-family:'Consolas','Courier New',monospace;font-size:11.5px;color:var(--muted);}
   .legend span{display:inline-flex;align-items:center;gap:6px;}
@@ -136,13 +139,13 @@
     <div class="panel flat" style="margin-bottom:14px;">
       <p class="axis-name">Tiến độ thi công khối đế & Công tác con</p>
       <p class="axis-note">Quản lý các mốc công tác lớn, chi tiết các công tác con thành phần và trạng thái tùy chỉnh.</p>
+      <div class="schedule-tabs" id="scheduleTabs"></div>
       <table>
         <thead>
           <tr>
             <th style="width:4%">STT</th>
             <th style="width:26%">Tên công tác / Công tác con</th>
             <th style="width:11%">Phòng ban</th>
-            <th style="width:9%">Khu vực</th>
             <th style="width:8%">Bắt đầu</th>
             <th style="width:8%">Kết thúc</th>
             <th style="width:14%">% Hoàn thành</th>
@@ -154,7 +157,10 @@
       </table>
       <div class="row-add">
         <input type="text" id="newTask" class="task-input" placeholder="Tên công tác lớn mới" style="width:220px">
-        <button onclick="addTask()">+ Thêm công tác lớn</button>
+        <input type="text" id="newSubtask" class="task-input" placeholder="Công tác con (không bắt buộc)" style="width:220px">
+        <input type="text" id="newTaskStart" class="date-input" placeholder="Bắt đầu">
+        <input type="text" id="newTaskEnd" class="date-input" placeholder="Kết thúc">
+        <button onclick="addTask()">+ Thêm công việc</button>
       </div>
     </div>
   </div>
@@ -286,25 +292,103 @@ const DEPARTMENTS = [
 ];
 const DEPT_MAP = Object.fromEntries(DEPARTMENTS.map(d=>[d.id,d]));
 
-const DEFAULT_TASKS = [
-  {task:"Lắp dựng EL(1) — Trục 1X7~1X1", dept:"sitework", el:"EL1", pct:0, start:"", end:"", statusText:"Đang triển khai", subtasks:[
-    {name:"Khảo sát mặt bằng & thả tuyến", done:true},
-    {name:"Lắp đặt bas/bracket neo", done:false},
-    {name:"Lắp dựng các khung nhôm EWS", done:false}
-  ]},
-  {task:"Lắp dựng Drop Out — Khu kỹ thuật", dept:"sitework", el:"DROPOUT", pct:0, start:"", end:"", statusText:"Chuẩn bị vật tư", subtasks:[
-    {name:"Gia công kết cấu thép phụ", done:true},
-    {name:"Lắp đặt các khung CW", done:false}
-  ]},
+const PDF_TASK_ROWS = [
+  [1,"TIẾN ĐỘ KHỐI ĐẾ GRAND MAHATAN QUẬN 1","", "28/07/2026","10/10/2026"],
+  [2,"A - CÔNG TÁC CHUẨN BỊ","", "28/07/2026","08/09/2026"],
+  [3,"Nhà thầu trình Shop Drawing theo RFI, phê duyệt","design","28/07/2026","29/07/2026"],
+  [4,"Thống kê vật tư RFB và ra Bill of Material (BOM)","boq","30/07/2026","30/07/2026"],
+  [5,"Thống kê vật tư các loại","boq","31/07/2026","31/07/2026"],
+  [6,"Phát hành hồ sơ nguyên vật liệu","design","01/08/2026","03/08/2026"],
+  [7,"Lập bản vẽ gia công Request Of CutList (RFC)","design","01/08/2026","03/08/2026"],
+  [8,"Gửi kế hoạch tới nhà cung cấp","purchase","04/08/2026","05/08/2026"],
+  [9,"7 - CÔNG TÁC ĐẶT HÀNG","purchase","28/07/2026","08/09/2026"],
+  [10,"7.1 Nhôm","purchase","28/07/2026","06/09/2026"],
+  [11,"7.2 Sử dụng nhôm đã đặt từ năm 2022 (thống kê, kiểm kê hàng hóa), thiếu thanh nhôm BK60A cho mặt 3,4,5","purchase","30/07/2026","03/08/2026"],
+  [12,"7.3 Đặt hàng nhôm BK60A","purchase","28/07/2026","11/08/2026"],
+  [13,"7.4 Mặt 1,2,6,7,8,9,10,11","purchase","06/08/2026","30/08/2026"],
+  [14,"8 - Kính","purchase","06/08/2026","02/09/2026"],
+  [15,"8.1 Mặt 3,4,5","purchase","06/08/2026","14/08/2026"],
+  [16,"8.2 Mặt 1,2,6,7,8,9,10,11","purchase","12/08/2026","02/09/2026"],
+  [17,"9 - Vật tư phụ, phụ kiện","purchase","06/08/2026","06/09/2026"],
+  [18,"9.1 Vật tư phụ, phụ kiện","purchase","06/08/2026","06/09/2026"],
+  [19,"10 - CÔNG TÁC GIA CÔNG","workshop","12/08/2026","08/09/2026"],
+  [20,"10.1 Gia công nhôm","workshop","12/08/2026","08/09/2026"],
+  [21,"10.2 Mặt 3,4,5","workshop","12/08/2026","18/08/2026"],
+  [22,"10.3 Mặt 1,2,6,7,8,9,10,11","workshop","01/09/2026","08/09/2026"],
+  [23,"11 - CÔNG TÁC NHẬN MẶT BẰNG KHẢO SÁT NHÔM","sitework","05/08/2026","30/08/2026"],
+  [24,"11.1 Mặt 3,4,5","sitework","05/08/2026","09/08/2026"],
+  [25,"11.2 Mặt 1,2","sitework","25/08/2026","26/08/2026"],
+  [26,"11.3 Mặt 6,7,8","sitework","27/08/2026","28/08/2026"],
+  [27,"11.4 Mặt 9,10,11","sitework","29/08/2026","30/08/2026"],
+  [28,"B - VẬT TƯ VỀ CÔNG TRÌNH","","15/08/2026","17/09/2026"],
+  [29,"15 - Khung bao nhôm","purchase","15/08/2026","17/09/2026"],
+  [30,"15.1 Mặt 3,4,5","purchase","15/08/2026","19/08/2026"],
+  [31,"15.2 Mặt 1,2","purchase","07/09/2026","08/09/2026"],
+  [32,"15.3 Mặt 6,7,8","purchase","09/09/2026","10/09/2026"],
+  [33,"15.4 Mặt 9,10,11","purchase","16/09/2026","17/09/2026"],
+  [34,"16 - Vật tư kính","purchase","16/08/2026","09/09/2026"],
+  [35,"16.1 Mặt 3,4,5","purchase","16/08/2026","20/08/2026"],
+  [36,"16.2 Mặt 1,2","purchase","04/09/2026","05/09/2026"],
+  [37,"16.3 Mặt 6,7,8","purchase","06/09/2026","07/09/2026"],
+  [38,"16.4 Mặt 9,10,11","purchase","08/09/2026","09/09/2026"],
+  [39,"C - CÔNG TÁC NGHIỆM THU","","16/08/2026","18/09/2026"],
+  [40,"17 - NGHIỆM THU VẬT LIỆU ĐẦU VÀO NHÔM","qs","16/08/2026","18/09/2026"],
+  [41,"17.1 Mặt 3,4,5","qs","16/08/2026","20/08/2026"],
+  [42,"17.2 Mặt 1,2","qs","08/09/2026","09/09/2026"],
+  [43,"17.3 Mặt 6,7,8","qs","10/09/2026","11/09/2026"],
+  [44,"17.4 Mặt 9,10,11","qs","17/09/2026","18/09/2026"],
+  [45,"18 - NGHIỆM THU VẬT LIỆU ĐẦU VÀO KÍNH","qs","17/08/2026","11/09/2026"],
+  [46,"18.1 Mặt 3,4,5","qs","17/08/2026","21/08/2026"],
+  [47,"18.2 Mặt 1,2","qs","06/09/2026","07/09/2026"],
+  [48,"18.3 Mặt 6,7,8","qs","08/09/2026","09/09/2026"],
+  [49,"18.4 Mặt 9,10,11","qs","10/09/2026","11/09/2026"],
+  [50,"D - CÔNG TÁC VẬN CHUYỂN","","17/08/2026","19/09/2026"],
+  [51,"19 - Công tác vận chuyển khung nhôm","workshop","17/08/2026","19/09/2026"],
+  [52,"19.1 Mặt 3,4,5","workshop","17/08/2026","21/08/2026"],
+  [53,"19.2 Mặt 1,2","workshop","09/09/2026","10/09/2026"],
+  [54,"19.4 Mặt 6,7,8","workshop","11/09/2026","12/09/2026"],
+  [55,"19.5 Mặt 9,10,11","workshop","18/09/2026","19/09/2026"],
+  [56,"20 - Công tác vận chuyển kính","workshop","20/08/2026","14/09/2026"],
+  [57,"20.1 Mặt 3,4,5","workshop","20/08/2026","24/08/2026"],
+  [58,"20.2 Mặt 1,2","workshop","09/09/2026","10/09/2026"],
+  [59,"20.3 Mặt 6,7,8","workshop","11/09/2026","12/09/2026"],
+  [60,"20.4 Mặt 9,10,11","workshop","13/09/2026","14/09/2026"],
+  [61,"E - CÔNG TÁC LẮP ĐẶT VÀ VỆ SINH","","18/08/2026","30/09/2026"],
+  [62,"21 - LẮP ĐẶT KHUNG NHÔM","sitework","18/08/2026","26/09/2026"],
+  [63,"21.1 Mặt 3,4,5","sitework","18/08/2026","27/08/2026"],
+  [64,"21.2 Mặt 1,2","sitework","10/09/2026","19/09/2026"],
+  [65,"21.3 Mặt 6,7,8","sitework","12/09/2026","19/09/2026"],
+  [66,"21.4 Mặt 9,10,11","sitework","19/09/2026","26/09/2026"],
+  [67,"22 - LẮP ĐẶT KÍNH CÁNH, BẮN KEO","sitework","22/08/2026","30/09/2026"],
+  [68,"22.1 Mặt 3,4,5","sitework","22/08/2026","30/08/2026"],
+  [69,"22.2 Mặt 1,2","sitework","14/09/2026","28/09/2026"],
+  [70,"22.3 Mặt 6,7,8","sitework","16/09/2026","25/09/2026"],
+  [71,"22.4 Mặt 9,10,11","sitework","21/09/2026","30/09/2026"],
+  [72,"23 - LẮP PHỤ KIỆN VÀ VỆ SINH CÔNG NGHIỆP","sitework","27/08/2026","04/10/2026"],
+  [73,"23.1 Mặt 3,4,5","sitework","27/08/2026","30/08/2026"],
+  [74,"23.2 Mặt 1,2","sitework","29/09/2026","02/10/2026"],
+  [75,"23.4 Mặt 6,7,8","sitework","26/09/2026","29/09/2026"],
+  [76,"23.5 Mặt 9,10,11","sitework","01/10/2026","04/10/2026"],
+  [77,"F - NGHIỆM THU BÀN GIAO","","28/08/2026","10/10/2026"],
+  [78,"24.1 Mặt 3,4,5","sitework","28/08/2026","30/08/2026"],
+  [79,"24.2 Mặt 1,2","sitework","06/10/2026","08/10/2026"],
+  [80,"24.3 Mặt 6,7,8","sitework","03/10/2026","05/10/2026"],
+  [81,"24.4 Mặt 9,10,11","sitework","08/10/2026","10/10/2026"]
 ];
 
-const STORE_KEY = "gma_facade_tracker_v17";
+const DEFAULT_TASKS = PDF_TASK_ROWS.map(([stt, task, dept, start, end]) => ({
+  stt, task, dept, el:"", pct:0, start, end, statusText:"Chưa bắt đầu", subtasks:[]
+}));
+const SCHEDULE_VERSION = 1;
+
+const STORE_KEY = "gma_facade_tracker_v18_schedule";
 const SYNC_DELAY_MS = 700;
 let state = null;
 let activeTab = ELEVATIONS[0].id;
 let mainView = "sitework";
 let expandedSubtasks = {};
 let expandedPanelSub = {}; // Bung/thu gọn chi tiết vật tư (Mua hàng) & công tác con (Thi công) theo mã tấm
+let scheduleDeptFilter = "all";
 let syncTimer = null;
 let syncInProgress = false;
 let syncQueued = false;
@@ -316,7 +400,7 @@ function freshPanel(code, qty, w=0, h=0){
 }
 
 function defaultState(){
-  const s = { elevations:{}, tasks: DEFAULT_TASKS.map(t=>({...t, subtasks: t.subtasks.map(st=>({...st}))})) };
+  const s = { scheduleVersion: SCHEDULE_VERSION, elevations:{}, tasks: DEFAULT_TASKS.map(t=>({...t, subtasks: t.subtasks.map(st=>({...st}))})) };
   ELEVATIONS.forEach(el=>{ s.elevations[el.id] = { panels: el.panels.map(p=>freshPanel(p.code,p.qty,p.w||0,p.h||0)) }; });
   return s;
 }
@@ -330,8 +414,11 @@ async function loadState(){
       
       // Nếu trên Google Sheet đã có dữ liệu lưu trữ
       if (cloudData && cloudData.elevations) {
-        state = cloudData;
+        state = cloudData.scheduleVersion === SCHEDULE_VERSION
+          ? cloudData
+          : {...cloudData, scheduleVersion: SCHEDULE_VERSION, tasks: DEFAULT_TASKS};
         localStorage.setItem(STORE_KEY, JSON.stringify(state)); // Lưu tạm vào máy
+        if (cloudData.scheduleVersion !== SCHEDULE_VERSION) saveState();
         render();
         return;
       }
@@ -831,16 +918,22 @@ function updateSiteTaskName(elId, idx, tIdx, val){
 
 function renderSchedule(){
   const body = document.getElementById("scheduleBody");
-  if(state.tasks.length===0){
-    body.innerHTML = `<tr><td colspan="9" style="color:var(--muted);padding:16px;">Chưa có công tác nào.</td></tr>`;
+  const scheduleTabs = document.getElementById("scheduleTabs");
+  scheduleTabs.innerHTML = `<button class="${scheduleDeptFilter==='all'?'active':''}" onclick="setScheduleDept('all')">Tất cả</button>` +
+    DEPARTMENTS.map(d=>`<button class="${scheduleDeptFilter===d.id?'active':''}" onclick="setScheduleDept('${d.id}')">${d.short}</button>`).join('');
+  const visibleTasks = state.tasks
+    .map((task, index) => ({task, index}))
+    .filter(item => scheduleDeptFilter === 'all' || item.task.dept === scheduleDeptFilter);
+  if(visibleTasks.length===0){
+    body.innerHTML = `<tr><td colspan="8" style="color:var(--muted);padding:16px;">Chưa có công việc trong tab này.</td></tr>`;
     return;
   }
   let html = "";
-  state.tasks.forEach((t, i)=>{
+  visibleTasks.forEach(({task:t, index:i})=>{
     const p = taskPct(t);
     const isExpanded = expandedSubtasks[i];
     html += `<tr>
-      <td class="code">${i+1}</td>
+      <td class="code">${t.stt || i+1}</td>
       <td>
         <div style="display:flex;align-items:center;gap:6px;">
           <input type="text" class="task-input" value="${t.task.replace(/"/g,'&quot;')}" onchange="updateTaskField(${i},'task',this.value)">
@@ -851,10 +944,6 @@ function renderSchedule(){
         <option value="">-- Chọn PB --</option>
         ${DEPARTMENTS.map(d=>`<option value="${d.id}" ${t.dept===d.id?'selected':''}>${d.short}</option>`).join('')}
       </select></td>
-      <td><select class="sel-input" onchange="updateTaskField(${i},'el',this.value)">
-        <option value="">-- Khu vực --</option>
-        ${ELEVATIONS.map(e=>`<option value="${e.id}" ${t.el===e.id?'selected':''}>${e.label}</option>`).join('')}
-      </select></td>
       <td><input type="text" class="date-input" value="${t.start||''}" onchange="updateTaskField(${i},'start',this.value)"></td>
       <td><input type="text" class="date-input" value="${t.end||''}" onchange="updateTaskField(${i},'end',this.value)"></td>
       <td>
@@ -864,11 +953,14 @@ function renderSchedule(){
         </div>
       </td>
       <td><input type="text" class="status-text-input" value="${(t.statusText||'').replace(/"/g,'&quot;')}" placeholder="Trạng thái..." onchange="updateTaskField(${i},'statusText',this.value)"></td>
-      <td><button class="del-btn" onclick="deleteTask(${i})" title="Xoá">✕</button></td>
+      <td style="white-space:nowrap;">
+        <button class="toggle-sub" onclick="insertTaskAfter(${i})" title="Chèn công việc sau dòng này">+</button>
+        <button class="del-btn" onclick="deleteTask(${i})" title="Xoá công việc">✕</button>
+      </td>
     </tr>`;
 
     if(isExpanded && t.subtasks){
-      html += `<tr><td colspan="9" style="background:rgba(0,0,0,0.12);padding:0;"><div class="subtask-container">`;
+      html += `<tr><td colspan="8" style="background:rgba(0,0,0,0.12);padding:0;"><div class="subtask-container">`;
       t.subtasks.forEach((st, stIdx)=>{
         html += `<div class="subtask-item">
           <input type="checkbox" ${st.done?'checked':''} onchange="toggleSubtask(${i},${stIdx})">
@@ -885,14 +977,39 @@ function renderSchedule(){
   body.innerHTML = html;
 }
 
+function setScheduleDept(deptId){ scheduleDeptFilter = deptId; renderSchedule(); }
 function updateTaskField(i, field, val){ state.tasks[i][field] = val; saveState(); render(); }
 function deleteTask(i){ state.tasks.splice(i,1); saveState(); render(); }
+function insertTaskAfter(i){
+  const current = state.tasks[i];
+  state.tasks.splice(i + 1, 0, {
+    stt: "",
+    task: "Công việc mới",
+    dept: current.dept || (scheduleDeptFilter === "all" ? "" : scheduleDeptFilter),
+    el: "",
+    pct: 0,
+    start: current.start || "",
+    end: current.end || "",
+    statusText: "Chưa bắt đầu",
+    subtasks: []
+  });
+  saveState();
+  render();
+}
 function addTask(){
   const inp = document.getElementById("newTask");
   const val = inp.value.trim();
   if(!val) return;
-  state.tasks.push({task:val, dept:"", el:"", pct:0, start:"", end:"", statusText:"Chưa bắt đầu", subtasks:[{name:"Khảo sát / Chuẩn bị", done:false}]});
-  inp.value = ""; saveState(); render();
+  const subtask = document.getElementById("newSubtask").value.trim();
+  const start = document.getElementById("newTaskStart").value.trim();
+  const end = document.getElementById("newTaskEnd").value.trim();
+  const dept = scheduleDeptFilter === "all" ? "" : scheduleDeptFilter;
+  state.tasks.push({task:val, dept, el:"", pct:0, start, end, statusText:"Chưa bắt đầu", subtasks:subtask ? [{name:subtask, done:false}] : []});
+  inp.value = "";
+  document.getElementById("newSubtask").value = "";
+  document.getElementById("newTaskStart").value = "";
+  document.getElementById("newTaskEnd").value = "";
+  saveState(); render();
 }
 function toggleSub(i){ expandedSubtasks[i] = !expandedSubtasks[i]; render(); }
 function toggleSubtask(i, stIdx){ state.tasks[i].subtasks[stIdx].done = !state.tasks[i].subtasks[stIdx].done; saveState(); render(); }
