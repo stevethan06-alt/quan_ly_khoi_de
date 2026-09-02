@@ -942,12 +942,17 @@ function cycleStatus(elId, idx){
   if (!requireDepartmentEditPermission(mainView)) return;
   const p = state.elevations[elId].panels[idx];
   const s = p.stages[mainView];
-  s.status = (s.status+1)%4;
-  if(s.status === 3) s.qtyDone = p.qty;
-  else if(s.status === 0) s.qtyDone = 0;
-  
+  s.status = (s.status + 1) % 4;
+
+  if (s.status === 3) {
+    s.qtyDone = p.qty;
+  } else if (s.status === 2 && (s.qtyDone === undefined || s.qtyDone === 0 || s.qtyDone > p.qty)) {
+    s.qtyDone = Math.min(p.qty, Math.max(0, p.qty));
+  } else if (s.status === 1 && (s.qtyDone === undefined || s.qtyDone === 0)) {
+    s.qtyDone = Math.min(p.qty, Math.max(0, Math.ceil(p.qty / 2)));
+  }
+
   syncToGoogleSheet(mainView, p.code, "Chuyển trạng thái: " + DEPT_MAP[mainView].statuses[s.status]);
-  
   saveState(); render();
 }
 
