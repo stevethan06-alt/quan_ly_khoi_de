@@ -671,14 +671,19 @@ function normalizeCloudState(rawData){
 
 // Hàm tải dữ liệu từ Google Sheet khi mở trang web
 async function loadState(){
+  const savedData = (() => {
+    try { return localStorage.getItem(STORE_KEY); } catch (e) { return null; }
+  })();
+
   try {
     if (GOOGLE_SHEET_WEB_APP_URL.startsWith("http")) {
       const response = await fetch(`${GOOGLE_SHEET_WEB_APP_URL}?_t=${Date.now()}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const cloudData = await response.json();
       const cloudState = normalizeCloudState(cloudData);
+      const hasRealCloudData = !!cloudState && (Object.keys(cloudState.elevations || {}).length > 0 || Array.isArray(cloudState.tasks) && cloudState.tasks.length > 0 || cloudState.scheduleVersion !== undefined);
 
-      if (cloudState && (cloudState.elevations || cloudState.tasks || cloudState.scheduleVersion !== undefined)) {
+      if (hasRealCloudData) {
         const baseState = defaultState();
         state = {
           ...baseState,
@@ -690,7 +695,7 @@ async function loadState(){
           },
           tasks: Array.isArray(cloudState.tasks) && cloudState.tasks.length ? cloudState.tasks : baseState.tasks
         };
-        localStorage.setItem(STORE_KEY, JSON.stringify(state));
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
         render();
         return;
       }
@@ -699,17 +704,15 @@ async function loadState(){
     console.log("Không tải được từ Cloud, dùng dữ liệu dưới máy:", err);
   }
 
-  // Fallback: Nếu chưa có trên mạng thì dùng dữ liệu dưới máy hoặc mặc định
-  try{
-    const savedData = localStorage.getItem(STORE_KEY);
-    if(savedData){
+  try {
+    if (savedData) {
       state = JSON.parse(savedData);
       if (!state || !state.elevations) state = defaultState();
     } else {
       state = defaultState();
       saveState();
     }
-  }catch(e){
+  } catch (e) {
     state = defaultState();
   }
   render();
@@ -726,10 +729,11 @@ function startLiveSync(){
 
 // Hàm đẩy toàn bộ trạng thái lên Google Sheet khi có thay đổi
 function saveState(){
-  try { 
-    localStorage.setItem(STORE_KEY, JSON.stringify(state)); 
+  if (!state || !state.elevations) return;
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
     queueCloudSync();
-  }catch(e){}
+  } catch (e) {}
 }
 
 function queueCloudSync(){
@@ -739,6 +743,7 @@ function queueCloudSync(){
 }
 
 function flushCloudSync(){
+  if (!state || !state.elevations) return;
   if (syncInProgress) {
     syncQueued = true;
     return;
