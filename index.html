@@ -1,593 +1,1354 @@
-const LOGIN_SHEETS = ["DangNhap", "Login", "TaiKhoan", "User", "Users"];
-const SPREADSHEET_ID = "";
-const JSON_CHUNK_SIZE = 40000;
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quản lý mặt đứng & Drop Out — The Grand Manhattan</title>
+<style>
+  :root{
+    --ink:#0f1a24; --panel:#16232f; --panel-2:#1c2b38; --line:#2a3d4d;
+    --blueprint:#4fb3d9; --paper:#e8edf1; --muted:#7b93a3; --safety:#e8863a;
+    --s0:#3b4a56; --s0-bg:#232f39;
+    --s1:#e8b93a; --s1-bg:#3a3220;
+    --s2:#4fb3d9; --s2-bg:#1b3340;
+    --s3:#4caf6e; --s3-bg:#1c3327;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--ink);
+    background-image:linear-gradient(var(--line) 1px, transparent 1px),linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size:28px 28px;background-attachment:fixed;
+    color:var(--paper);font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif;min-height:100vh;}
+  .wrap{max-width:1320px;margin:0 auto;padding:28px 20px 60px;}
+  header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--blueprint);padding-bottom:16px;margin-bottom:20px;flex-wrap:wrap;gap:14px;}
+  .eyebrow{font-family:'Consolas','Courier New',monospace;letter-spacing:.18em;text-transform:uppercase;font-size:11px;color:var(--blueprint);margin:0 0 6px;}
+  h1{margin:0;font-size:26px;font-weight:700;letter-spacing:.01em;}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px;}
+  .overall{text-align:right;font-family:'Consolas','Courier New',monospace;}
+  .overall .pct{font-size:34px;font-weight:700;color:var(--blueprint);line-height:1;}
+  .overall .lbl{font-size:11px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;}
 
-const DEPARTMENTS = [
-  { id: "design", name: "Thiet ke" },
-  { id: "boq", name: "Thong ke" },
-  { id: "qs", name: "QS" },
-  { id: "purchase", name: "Mua hang" },
-  { id: "workshop", name: "Xuong gia cong" },
-  { id: "sitework", name: "Thi cong" }
-];
+  .mainnav{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
+  .mainnav button{background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:9px 14px;border-radius:7px;cursor:pointer;font-size:12.5px;font-weight:600;white-space:nowrap;}
+  .mainnav button.active{background:var(--blueprint);color:var(--ink);border-color:var(--blueprint);}
+  .mainnav .sep{width:1px;background:var(--line);margin:4px 4px;}
+  .schedule-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px;}
+  .schedule-tabs button{background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:7px 11px;border-radius:5px;cursor:pointer;font-size:12px;}
+  .schedule-tabs button.active{background:var(--blueprint);border-color:var(--blueprint);color:var(--ink);}
 
-function getSpreadsheet_() {
-  return SPREADSHEET_ID
-    ? SpreadsheetApp.openById(SPREADSHEET_ID)
-    : SpreadsheetApp.getActiveSpreadsheet();
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px;font-family:'Consolas','Courier New',monospace;font-size:11.5px;color:var(--muted);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .dot{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;}
+  .tab{background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:9px 14px;border-radius:6px 6px 0 0;cursor:pointer;font-family:'Consolas','Courier New',monospace;font-size:12.5px;display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:118px;transition:.15s;}
+  .tab .bar{width:100%;height:3px;background:var(--line);border-radius:2px;overflow:hidden;}
+  .tab .bar i{display:block;height:100%;background:var(--muted);}
+  .tab.active{background:var(--panel-2);color:var(--paper);border-color:var(--blueprint);}
+  .tab:hover{color:var(--paper);}
+
+  .panel{background:var(--panel-2);border:1px solid var(--line);border-radius:0 8px 8px 8px;padding:18px;}
+  .panel.flat{border-radius:8px;}
+  .axis-name{font-family:'Consolas','Courier New',monospace;color:var(--blueprint);font-size:13px;margin:0 0 2px;}
+  .axis-note{color:var(--muted);font-size:12px;margin:0 0 16px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  thead th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--line);padding:6px 8px;}
+  tbody td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,0.04);}
+  tbody tr:hover{background:rgba(79,179,217,0.05);}
+  .code{font-family:'Consolas','Courier New',monospace;font-weight:600;}
+  .qty-input, .dim-input{width:64px;background:var(--panel);border:1px solid var(--line);color:var(--paper);border-radius:4px;padding:4px 6px;font-family:'Consolas','Courier New',monospace;text-align:center;}
+  .dim-input:disabled, .qty-input:disabled{opacity:0.65;background:rgba(22,35,47,0.5);cursor:not-allowed;}
+  .note-input{width:100%;background:transparent;border:none;border-bottom:1px dashed var(--line);color:var(--paper);font-size:12.5px;padding:3px 2px;}
+  .note-input:focus{outline:none;border-bottom-color:var(--blueprint);}
+  .task-input{width:100%;background:transparent;border:none;border-bottom:1px dashed var(--line);color:var(--paper);font-size:13px;padding:3px 2px;font-weight:600;}
+  .task-input:focus{outline:none;border-bottom-color:var(--blueprint);}
+  .date-input, .sel-input{background:var(--panel);border:1px solid var(--line);color:var(--paper);border-radius:4px;padding:4px 6px;font-family:'Consolas','Courier New',monospace;font-size:12px;}
+  .status-text-input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--paper);border-radius:4px;padding:5px 8px;font-size:12.5px;}
+  .status-text-input:focus{outline:none;border-color:var(--blueprint);}
+
+  .status-btn{border:1px solid transparent;border-radius:5px;padding:5px 10px;font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;transition:.12s;}
+  .st-0{background:var(--s0-bg);color:var(--s0);border-color:var(--s0);}
+  .st-1{background:var(--s1-bg);color:var(--s1);border-color:var(--s1);}
+  .st-2{background:var(--s2-bg);color:var(--s2);border-color:var(--s2);}
+  .st-3{background:var(--s3-bg);color:var(--s3);border-color:var(--s3);}
+  .status-btn:active{transform:scale(0.96);}
+
+  .barcell{display:flex;align-items:center;gap:8px;}
+  .mini-bar{flex:1;height:8px;background:var(--panel);border-radius:4px;overflow:hidden;min-width:60px;}
+  .mini-bar i{display:block;height:100%;background:var(--blueprint);}
+
+  .row-add{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;}
+  .row-add input, .row-add select{background:var(--panel);border:1px solid var(--line);color:var(--paper);border-radius:5px;padding:7px 10px;font-family:'Consolas','Courier New',monospace;font-size:12.5px;}
+  .row-add input.code-in{width:130px;text-transform:uppercase;}
+  .row-add input.qty-in, .row-add input.dim-in{width:80px;text-align:center;}
+  .row-add button, .del-btn{background:transparent;border:1px solid var(--blueprint);color:var(--blueprint);border-radius:5px;padding:7px 14px;cursor:pointer;font-size:12.5px;font-family:inherit;}
+  .row-add button:hover{background:var(--blueprint);color:var(--ink);}
+  .del-btn{border-color:#8a3a3a;color:#d9756f;padding:4px 8px;}
+  .del-btn:hover{background:#8a3a3a;color:var(--paper);}
+
+  .subtask-container{background:rgba(0,0,0,0.18);padding:8px 12px;border-left:3px solid var(--blueprint);margin:6px 0;border-radius:0 6px 6px 0;font-size:12.5px;}
+  .subtask-item{display:flex;align-items:center;gap:8px;margin:4px 0;}
+  .subtask-item input[type="text"]{flex:1;background:transparent;border:none;border-bottom:1px dotted var(--line);color:var(--paper);padding:2px;}
+  .subtask-item input[type="text"]:focus{outline:none;border-bottom-color:var(--blueprint);}
+  .toggle-sub{background:var(--panel);border:1px solid var(--line);color:var(--blueprint);padding:2px 6px;border-radius:4px;font-size:11px;cursor:pointer;}
+
+  .caveat{margin-top:20px;font-size:12px;color:var(--muted);border-top:1px dashed var(--line);padding-top:12px;line-height:1.6;}
+  .caveat b{color:var(--safety);}
+  .login-shell{position:fixed;inset:0;background:rgba(10,16,22,0.82);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(3px);}
+  .login-box{width:min(520px,92vw);background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 22px 50px rgba(0,0,0,.38);}
+  .login-box h2{margin:0 0 10px;font-size:28px;color:var(--paper);} 
+  .login-box p{margin:0 0 18px;color:var(--muted);font-size:13px;}
+  .login-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+  .login-field{display:flex;flex-direction:column;gap:8px;grid-column:span 2;}
+  .login-field.half{grid-column:span 1;}
+  .login-field label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+  .login-field input, .login-field select{background:var(--panel);border:1px solid var(--line);color:var(--paper);border-radius:8px;padding:11px 12px;font-size:14px;}
+  .login-field input:focus, .login-field select:focus{outline:none;border-color:var(--blueprint);}
+  .login-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:18px;flex-wrap:wrap;}
+  .login-status{color:#f4cc73;font-size:12px;min-height:18px;}
+  .login-btn{background:var(--blueprint);border:none;color:var(--ink);padding:11px 18px;border-radius:8px;font-weight:700;cursor:pointer;}
+  .login-btn:hover{filter:brightness(1.05);}
+  .user-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(79,179,217,0.08);border:1px solid var(--line);color:var(--paper);padding:8px 12px;border-radius:999px;font-size:12px;}
+  .logout-btn{background:transparent;border:1px solid var(--line);color:var(--paper);padding:8px 12px;border-radius:8px;cursor:pointer;}
+  .hidden{display:none !important;}
+  footer{margin-top:26px;text-align:center;color:var(--muted);font-size:11px;font-family:'Consolas','Courier New',monospace;letter-spacing:.06em;}
+</style>
+</head>
+<body>
+<div id="loginModal" class="login-shell">
+  <div class="login-box">
+    <h2>Đăng nhập hệ thống</h2>
+    <p>Nhập tài khoản, mật khẩu và phòng ban để truy cập dữ liệu theo quyền phân quyền.</p>
+    <div class="login-grid">
+      <div class="login-field half">
+        <label for="loginUser">User</label>
+        <input id="loginUser" type="text" placeholder="Nhập user...">
+      </div>
+      <div class="login-field half">
+        <label for="loginPassword">Password</label>
+        <input id="loginPassword" type="password" placeholder="Nhập mật khẩu...">
+      </div>
+      <div class="login-field">
+        <label for="loginDepartment">Phòng ban</label>
+        <select id="loginDepartment"></select>
+      </div>
+    </div>
+    <div class="login-actions">
+      <div id="loginStatus" class="login-status"></div>
+      <button class="login-btn" id="loginBtn" type="button">Đăng nhập</button>
+    </div>
+  </div>
+</div>
+<div class="wrap">
+
+  <header>
+    <div class="title-block">
+      <p class="eyebrow">GMA.Q1 · Bản vẽ nhôm kính khối đế</p>
+      <h1>Quản lý mặt đứng & Drop Out — The Grand Manhattan</h1>
+      <p class="sub" id="subline">Quản lý tiến độ chi tiết tích hợp công tác con</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;">
+      <div id="userBadge" class="user-chip hidden"></div>
+      <button id="logoutBtn" class="logout-btn hidden" type="button" onclick="logoutCurrentUser()">Đăng xuất</button>
+      <div class="overall">
+        <div class="pct" id="overallPct">0%</div>
+        <div class="lbl" id="overallLbl">Tiến độ tổng thể</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="mainnav" id="mainnav"></div>
+
+  <!-- ===== DEPARTMENT VIEW ===== -->
+  <div id="viewDept">
+    <div class="legend" id="legend"></div>
+
+    <div class="panel flat" id="summaryPanel" style="margin-bottom:18px;">
+      <p class="axis-name" id="summaryTitle">Tổng số khung</p>
+      <table id="summaryTable">
+        <thead id="summaryHead"></thead>
+        <tbody id="summaryBody"></tbody>
+      </table>
+    </div>
+
+    <div class="tabs" id="tabs"></div>
+    <div class="panel" id="panelBody"></div>
+
+    <div class="caveat">
+      <b>Lưu ý:</b> Kích thước và Tổng SL tiêu chuẩn đã được khóa an toàn. Bạn có thể thêm mã tấm mới hoặc điều chỉnh số lượng đã hoàn thành bên dưới.
+    </div>
+  </div>
+
+  <!-- ===== SCHEDULE VIEW ===== -->
+  <div id="viewSchedule" style="display:none;">
+    <div class="panel flat" style="margin-bottom:14px;">
+      <p class="axis-name">Tiến độ thi công khối đế & Công tác con</p>
+      <p class="axis-note">Quản lý các mốc công tác lớn, chi tiết các công tác con thành phần và trạng thái tùy chỉnh.</p>
+      <div class="schedule-tabs" id="scheduleTabs"></div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:4%">STT</th>
+            <th style="width:26%">Tên công tác / Công tác con</th>
+            <th style="width:11%">Phòng ban</th>
+            <th style="width:8%">Bắt đầu</th>
+            <th style="width:8%">Kết thúc</th>
+            <th style="width:14%">% Hoàn thành</th>
+            <th style="width:16%">Trạng thái (Tự điền)</th>
+            <th style="width:4%"></th>
+          </tr>
+        </thead>
+        <tbody id="scheduleBody"></tbody>
+      </table>
+      <div class="row-add">
+        <input type="text" id="newTask" class="task-input" placeholder="Tên công tác lớn mới" style="width:220px">
+        <input type="text" id="newSubtask" class="task-input" placeholder="Công tác con (không bắt buộc)" style="width:220px">
+        <input type="text" id="newTaskStart" class="date-input" placeholder="Bắt đầu">
+        <input type="text" id="newTaskEnd" class="date-input" placeholder="Kết thúc">
+        <button onclick="addTask()">+ Thêm công việc</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>TRẦN MINH HIẾU · THIẾT KẾ PODIUM 2026 · TRACKING TOOL</footer>
+</div>
+
+<script>
+// Tích hợp đường dẫn Google Apps Script Web App của bạn
+const GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyLG0ZI1pu62bjjyCOSqHIGq_dEuY_JuapggWcCOK4_k_3XYOjXOFT0Ape4kqLOzMwfOw/exec";
+const AUTH_KEY = "gma_tracker_login_user";
+const currentUser = { loggedIn: false, user: "", name: "", department: "", departmentId: "" };
+
+function syncToGoogleSheet(deptId, panelCode, statusDesc) {
+  return { deptId, panelCode, statusDesc };
 }
 
-function doGet(e) {
-  ensureHandoverSheet_();
-  const action = (e && e.parameter && e.parameter.action) ? clean_(e.parameter.action).toLowerCase() : "";
-
-  if (action === "login") {
-    const username = clean_(e.parameter.user || e.parameter.username || e.parameter.account);
-    const password = clean_(e.parameter.password || e.parameter.pass || e.parameter.matkhau);
-    const department = clean_(e.parameter.department || e.parameter.phongBan || e.parameter.dept);
-    return jsonResponse_(validateLogin_(username, password, department));
-  }
-
-  if (action === "users") {
-    return jsonResponse_({ users: getLoginUsers_() });
-  }
-
-  const spreadsheet = getSpreadsheet_();
-  const storedState = readStoredStateFromLegacySheet_(spreadsheet);
-
-  return jsonResponse_({
-    nhanLuc: readSheet_("NhanLuc", SHEETS.NhanLuc),
-    baoCao: readSheet_("BaoCaoCuoiNgay", SHEETS.BaoCaoCuoiNgay),
-    tienDoGiaoNha: readSheet_("TienDoGiaoNha", SHEETS.TienDoGiaoNha),
-    userIds: readUserIds_(),
-    loginUsers: getLoginUsers_(),
-    fullState: storedState,
-    state: storedState,
-    elevations: storedState && storedState.elevations ? storedState.elevations : {},
-    tasks: storedState && storedState.tasks ? storedState.tasks : []
-  });
+function normalizeDepartmentId(value) {
+  const text = String(value || "").trim().toLowerCase();
+  const map = {
+    "phòng thiết kế": "design",
+    "thiet ke": "design",
+    "thiết kế": "design",
+    "design": "design",
+    "phòng thống kê": "boq",
+    "thong ke": "boq",
+    "thống kê": "boq",
+    "boq": "boq",
+    "phòng qs": "qs",
+    "qs": "qs",
+    "phòng mua hàng": "purchase",
+    "mua hàng": "purchase",
+    "purchase": "purchase",
+    "xưởng gia công": "workshop",
+    "xuong gia cong": "workshop",
+    "workshop": "workshop",
+    "phòng thi công": "sitework",
+    "thi cong": "sitework",
+    "sitework": "sitework"
+  };
+  return map[text] || text;
 }
 
-function doPost(event) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
+function fillDepartmentSelect() {
+  const select = document.getElementById("loginDepartment");
+  if (!select) return;
+  select.innerHTML = DEPARTMENTS.map(d => `<option value="${d.name}">${d.name}</option>`).join("");
+}
+
+function showLoginStatus(message, isError = false) {
+  const status = document.getElementById("loginStatus");
+  if (!status) return;
+  status.textContent = message || "";
+  status.style.color = isError ? "#f5a3a3" : "#f4cc73";
+}
+
+function updateUserBadge() {
+  const userBadge = document.getElementById("userBadge");
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (!userBadge || !logoutBtn) return;
+  if (currentUser.loggedIn) {
+    userBadge.textContent = `${currentUser.name || currentUser.user} · ${currentUser.department}`;
+    userBadge.classList.remove("hidden");
+    logoutBtn.classList.remove("hidden");
+  } else {
+    userBadge.classList.add("hidden");
+    logoutBtn.classList.add("hidden");
+  }
+}
+
+function saveLoginState() {
   try {
-    const data = parseRequest_(event);
-
-    if (data.action === "login") {
-      return jsonResponse_(validateLogin_(data.user, data.password, data.department));
-    }
-
-    if (data.action === "save") {
-      return jsonResponse_({ status: "success", message: "Da luu du lieu" });
-    }
-
-    if (data.fullState && data.fullState.elevations) {
-      const spreadsheet = getSpreadsheet_();
-      DEPARTMENTS.forEach(dept => writeDepartmentSheet_(spreadsheet, dept, data));
-      return jsonResponse_({ ok: true, savedAt: data.savedAt || new Date().toISOString() });
-    }
-
-    if (!Array.isArray(data.rows) || data.rows.length === 0) throw new Error("Payload khong co du lieu");
-
-    if (data.type === "nhanluc") saveNhanLuc_(data.rows);
-    else if (data.type === "baocao") saveBaoCao_(data.rows);
-    else saveHandover_(data.rows, data.userId);
-
-    return jsonResponse_({ status: "success", message: "Da luu du lieu" });
-  } catch (error) {
-    return jsonResponse_({ status: "error", message: error.message });
-  } finally {
-    lock.releaseLock();
+    localStorage.setItem(AUTH_KEY, JSON.stringify(currentUser));
+  } catch (e) {
+    console.log("Lưu session login lỗi", e);
   }
 }
 
-function parseRequest_(event) {
-  if (!event || !event.postData || !event.postData.contents) throw new Error("Khong co du lieu gui len");
-  const data = JSON.parse(event.postData.contents);
-  if (!data) throw new Error("Khong co du lieu gui len");
-  if (!data.type && !data.action) throw new Error("Loai du lieu khong hop le");
-  return data;
-}
-
-function getLoginUsers_() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const users = [];
-  const seen = new Set();
-
-  LOGIN_SHEETS.forEach(sheetName => {
-    const sheet = spreadsheet.getSheetByName(sheetName);
-    if (!sheet || sheet.getLastRow() < 2) return;
-
-    const rows = sheet.getDataRange().getValues();
-    rows.slice(1).forEach(row => {
-      const entry = extractLoginEntry_(row);
-      if (!entry || !entry.user || !entry.password || !entry.department) return;
-      const key = [entry.user, entry.password, entry.department].join("|").toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key);
-      users.push({
-        user: entry.user,
-        password: entry.password,
-        department: entry.department,
-        departmentId: normalizeDepartmentId_(entry.department),
-        name: entry.name || entry.user
-      });
-    });
-  });
-
-  const userSheet = spreadsheet.getSheetByName(SHEETS.User.name);
-  if (userSheet && userSheet.getLastRow() >= 2) {
-    const rows = userSheet.getDataRange().getValues();
-    rows.slice(1).forEach(row => {
-      const entry = extractLoginEntry_(row);
-      if (!entry || !entry.user || !entry.password || !entry.department) return;
-      const key = [entry.user, entry.password, entry.department].join("|").toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key);
-      users.push({
-        user: entry.user,
-        password: entry.password,
-        department: entry.department,
-        departmentId: normalizeDepartmentId_(entry.department),
-        name: entry.name || entry.user
-      });
-    });
+function loadLoginState() {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.loggedIn) {
+      currentUser.loggedIn = true;
+      currentUser.user = parsed.user || "";
+      currentUser.name = parsed.name || parsed.user || "";
+      currentUser.department = parsed.department || "";
+      currentUser.departmentId = parsed.departmentId || normalizeDepartmentId(parsed.department || "");
+    }
+  } catch (e) {
+    console.log("Đọc session login lỗi", e);
   }
-
-  return users;
 }
 
-function extractLoginEntry_(row) {
-  if (!Array.isArray(row) || row.length === 0) return null;
-  const cleanRow = row.map(value => clean_(value));
-  const normalized = cleanRow.map(value => value.toLowerCase());
-  const headerIndex = normalized.findIndex(value => ["user", "username", "ten dang nhap", "tai khoan", "account", "ma nhan vien"].includes(value));
-  if (headerIndex !== -1 && normalized[headerIndex] === "user") return null;
+function logoutCurrentUser() {
+  currentUser.loggedIn = false;
+  currentUser.user = "";
+  currentUser.name = "";
+  currentUser.department = "";
+  currentUser.departmentId = "";
+  saveLoginState();
+  updateUserBadge();
+  const modal = document.getElementById("loginModal");
+  if (modal) modal.classList.remove("hidden");
+  showLoginStatus("Bạn đã đăng xuất.", false);
+}
 
-  const userIndex = findValueIndex_(normalized, ["user", "username", "ten dang nhap", "tai khoan", "account", "ma nhan vien", "login", "nguoi dung"]);
-  const passwordIndex = findValueIndex_(normalized, ["password", "mat khau", "matkhau", "pass", "passwd", "mkhau"]);
-  const departmentIndex = findValueIndex_(normalized, ["phong ban", "phòng ban", "department", "bo phan", "phongban", "bo_phan", "phòngban"]);
-  const nameIndex = findValueIndex_(normalized, ["ten", "ho ten", "full name", "name", "hoten"]);
-
-  const user = userIndex !== -1 ? cleanRow[userIndex] : cleanRow[0];
-  const password = passwordIndex !== -1 ? cleanRow[passwordIndex] : cleanRow[1] || cleanRow[0];
-  let department = departmentIndex !== -1 ? cleanRow[departmentIndex] : cleanRow[2] || cleanRow[1];
-  const name = nameIndex !== -1 ? cleanRow[nameIndex] : cleanRow[3] || user;
+async function loginUser() {
+  const userInput = document.getElementById("loginUser");
+  const passInput = document.getElementById("loginPassword");
+  const deptInput = document.getElementById("loginDepartment");
+  const user = (userInput ? userInput.value : "").trim();
+  const password = (passInput ? passInput.value : "").trim();
+  const department = (deptInput ? deptInput.value : "").trim();
 
   if (!user || !password || !department) {
-    const fallbackUser = cleanRow[0];
-    const fallbackPassword = cleanRow[1];
-    const fallbackDept = cleanRow[2];
-    if (!fallbackUser || !fallbackPassword || !fallbackDept) return null;
-    department = fallbackDept;
-    return { user: fallbackUser, password: fallbackPassword, department: fallbackDept, name: cleanRow[3] || fallbackUser };
+    showLoginStatus("Vui lòng nhập đủ User, Password và Phòng ban.", true);
+    return;
   }
 
-  return { user, password, department, name };
+  const qs = new URLSearchParams({ action: "login", user, password, department });
+  try {
+    showLoginStatus("Đang xác thực...");
+    const response = await fetch(`${GOOGLE_SHEET_WEB_APP_URL}?${qs.toString()}`);
+    const result = await response.json();
+
+    if (!result || result.status !== "success") {
+      showLoginStatus(result && result.message ? result.message : "Đăng nhập thất bại.", true);
+      return;
+    }
+
+    currentUser.loggedIn = true;
+    currentUser.user = result.user || user;
+    currentUser.name = result.name || result.user || user;
+    currentUser.department = result.department || department;
+    currentUser.departmentId = normalizeDepartmentId(result.departmentId || result.department || department);
+    saveLoginState();
+    updateUserBadge();
+
+    const modal = document.getElementById("loginModal");
+    if (modal) modal.classList.add("hidden");
+    showLoginStatus("Đăng nhập thành công.");
+    render();
+  } catch (error) {
+    console.error(error);
+    showLoginStatus("Không thể kết nối tới hệ thống đăng nhập.", true);
+  }
 }
 
-function findValueIndex_(values, candidates) {
-  const lowered = values.map(value => String(value || "").toLowerCase());
-  for (let i = 0; i < candidates.length; i += 1) {
-    const index = lowered.findIndex(value => value === candidates[i]);
-    if (index !== -1) return index;
+function requireDepartmentEditPermission(targetDeptId = mainView) {
+  if (!currentUser.loggedIn) {
+    const modal = document.getElementById("loginModal");
+    if (modal) modal.classList.remove("hidden");
+    showLoginStatus("Bạn cần đăng nhập trước khi sửa dữ liệu.", true);
+    return false;
   }
-  return -1;
+
+  if (currentUser.departmentId && currentUser.departmentId !== targetDeptId) {
+    showLoginStatus(`Bạn chỉ có quyền sửa ${currentUser.department}. Dữ liệu của phòng ban khác chỉ được xem.
+`, true);
+    return false;
+  }
+
+  return true;
 }
 
-function validateLogin_(username, password, department) {
-  const user = clean_(username).toLowerCase();
-  const pass = clean_(password);
-  const deptInput = clean_(department);
-
-  if (!user || !pass) {
-    return { status: "error", message: "Vui lòng nhập user và mật khẩu." };
+function renderLoginControls() {
+  const modal = document.getElementById("loginModal");
+  const loginBtn = document.getElementById("loginBtn");
+  if (loginBtn) {
+    loginBtn.onclick = loginUser;
   }
+  if (modal && currentUser.loggedIn) {
+    modal.classList.add("hidden");
+  }
+  updateUserBadge();
+}
+const ELEVATIONS = [
+  { id:"EL1", label:"EL (1)", axis:"Trục 1X7 ~ 1X1", type:"el", note:"Đã cập nhật kích thước chuẩn bản vẽ.",
+    panels:[
+      {code:"EWS-3",qty:4,w:2120,h:2530},{code:"EWS-30",qty:4,w:1800,h:5000},{code:"EWS-3A",qty:4,w:2120,h:2450},
+      {code:"EWS-43",qty:18,w:1800,h:2000},{code:"EWS-44",qty:6,w:1800,h:1750}
+    ]
+  },
+  { id:"EL2", label:"EL (2)", axis:"Trục 1X1 ~ 1X9", type:"el", note:"Đã nội suy và hoàn thiện danh mục tấm chuẩn.",
+    panels:[
+      {code:"EWS-02",qty:4,w:2350,h:4750},{code:"EWS-3",qty:6,w:2120,h:2530},{code:"EWS-3A",qty:6,w:2120,h:2450},
+      {code:"EWS-30",qty:12,w:1800,h:5000},{code:"EWS-45",qty:36,w:1800,h:2000},{code:"EWS-45A",qty:4,w:1800,h:1750},
+      {code:"EWS-46",qty:4,w:1400,h:2000},{code:"EWS-48",qty:8,w:1800,h:1650},{code:"LVWS-2",qty:1,w:8000,h:5850}
+    ]
+  },
+  { id:"EL3", label:"EL (3)", axis:"Trục 1Y11 ~ 1Y1", type:"el", note:"Đã cập nhật chuẩn theo bản vẽ EL 3.",
+    panels:[
+      {code:"EWS-14",qty:28,w:2430,h:2000},{code:"EWS-14A",qty:2,w:2430,h:1750},{code:"EWS-15",qty:6,w:1500,h:2000},{code:"EWS-2",qty:2,w:2350,h:4750},
+      {code:"EWS-20",qty:3,w:1500,h:1700},{code:"EWS-21",qty:12,w:2430,h:1700},{code:"EWS-22",qty:2,w:2430,h:1700},{code:"EWS-23",qty:3,w:1500,h:1750},
+      {code:"EWS-24",qty:8,w:2430,h:1750},{code:"EWS-25",qty:4,w:2430,h:1750},{code:"EWS-26",qty:6,w:1550,h:1600},{code:"EWS-27",qty:2,w:1550,h:1950},
+      {code:"EWS-3",qty:7,w:2120,h:2530},{code:"EWS-31",qty:3,w:1500,h:5000},{code:"EWS-32",qty:8,w:2430,h:5000},{code:"EWS-33",qty:2,w:4400,h:4600},
+      {code:"EWS-34",qty:1,w:1800,h:4600},{code:"EWS-35",qty:2,w:2430,h:5000},{code:"EWS-3A",qty:5,w:2120,h:2450},{code:"EWS-3B",qty:2,w:2120,h:2450},
+      {code:"EWS-5",qty:2,w:1300,h:2530},{code:"EWS-5A",qty:2,w:1300,h:2450},{code:"EWS-6.1A",qty:1,w:1200,h:2450}
+    ]
+  },
+  { id:"EL4", label:"EL (4)", axis:"Trục 1Y1 ~ 1Y11", type:"el", note:"Đã cập nhật chuẩn theo bản vẽ EL 4.",
+    panels:[
+      {code:"EWD-01",qty:1,w:800,h:2200},{code:"EWD-02",qty:1,w:1670,h:2650},{code:"EWD-03",qty:1,w:2630,h:2650},{code:"EWS-12",qty:11,w:1670,h:2000},
+      {code:"EWS-14",qty:2,w:2430,h:2000},{code:"EWS-17",qty:4,w:1670,h:1700},{code:"EWS-19",qty:1,w:2430,h:1630},{code:"EWS-28A",qty:1,w:1400,h:1850},
+      {code:"EWS-28B",qty:3,w:1400,h:2000},{code:"EWS-36",qty:1,w:2120,h:2780},{code:"EWS-36A",qty:1,w:2120,h:1800},{code:"EWS-41",qty:1,w:2100,h:2000},
+      {code:"EWS-45B",qty:7,w:1800,h:1900},{code:"EWS-48",qty:7,w:1800,h:1650},{code:"EWS-5",qty:2,w:1300,h:2530},{code:"EWS-5A",qty:2,w:1300,h:2450},
+      {code:"EWS-6.1B",qty:1,w:1200,h:2450},{code:"EWS-7",qty:2,w:2120,h:2530},{code:"EWS-7A",qty:1,w:2120,h:2450},{code:"EWS-7B",qty:1,w:2120,h:2450},
+      {code:"LVWS-1",qty:1,w:6600,h:5850}
+    ]
+  },
+  { id:"EL5", label:"EL (5)", axis:"Trục 2Y4 ~ 2Y1", type:"el", note:"Đã cập nhật chuẩn theo bản vẽ EL 5.",
+    panels:[
+      {code:"EWS-3",qty:4,w:2120,h:2530},{code:"EWS-37",qty:3,w:2100,h:5000},{code:"EWS-3A-1",qty:4,w:2120,h:2370},{code:"EWS-49",qty:6,w:2100,h:2000},
+      {code:"EWS-50",qty:2,w:2100,h:1750},{code:"EWS-51",qty:3,w:1350,h:2000},{code:"EWS-52",qty:1,w:1600,h:1850},{code:"EWS-6.1",qty:1,w:1200,h:2350},
+      {code:"EWS-6.1A-1",qty:1,w:1200,h:2370},{code:"EWS-8",qty:1,w:1700,h:2530},{code:"EWS-8A-1",qty:1,w:1700,h:2450}
+    ]
+  },
+  {
+    id: "EL6",
+    label: "EL (6)",
+    axis: "Trục 2X1 ~ 2X9",
+    type: "el",
+    note: "Đã nội suy và hoàn thiện danh mục tấm chuẩn khối đế.",
+    panels: [
+      { code: "AD-01", qty: 1, w: 1200, h: 2530 },
+      { code: "EWS-2_A1", qty: 2, w: 2650, h: 4770 },
+      { code: "EWS-2_A2", qty: 2, w: 2650, h: 4770 },
+      { code: "EWS-3", qty: 5, w: 2120, h: 2530 },
+      { code: "EWS-30", qty: 8, w: 1800, h: 5000 },
+      { code: "EWS-38", qty: 4, w: 1800, h: 5000 },
+      { code: "EWS-39", qty: 1, w: 1260, h: 5000 },
+      { code: "EWS-3A", qty: 4, w: 2120, h: 2450 },
+      { code: "EWS-3B", qty: 1, w: 2120, h: 2450 },
+      { code: "EWS-43", qty: 29, w: 1800, h: 2000 },
+      { code: "EWS-44", qty: 2, w: 1800, h: 1750 },
+      { code: "EWS-45", qty: 27, w: 1800, h: 2000 },
+      { code: "EWS-46", qty: 2, w: 1400, h: 2000 },
+      { code: "EWS-46A", qty: 1, w: 1260, h: 2000 },
+      { code: "EWS-48A", qty: 9, w: 1800, h: 1525 },
+      { code: "EWS-54", qty: 9, w: 1800, h: 1750 },
+      { code: "EWS-55", qty: 1, w: 1600, h: 2000 },
+      { code: "EWS-56", qty: 1, w: 1600, h: 1525 },
+      { code: "EWS-58", qty: 1, w: 1400, h: 1650 },
+      { code: "EWS-6.1", qty: 1, w: 1200, h: 2350 },
+      { code: "EWS-6.1A", qty: 1, w: 1200, h: 2450 },
+      { code: "EWS-9", qty: 1, w: 5760, h: 2450 },
+      { code: "EWS-9A", qty: 1, w: 5760, h: 2530 },
+      { code: "LVWS-10", qty: 1, w: 4900, h: 2530 },
+      { code: "LVWS-10A", qty: 1, w: 4900, h: 2450 },
+      { code: "LVWS-3", qty: 1, w: 3500, h: 2530 },
+      { code: "LVWS-3-1", qty: 1, w: 3800, h: 5850 },
+      { code: "LVWS-3A", qty: 2, w: 3500, h: 2450 },
+      { code: "LVWS-4", qty: 1, w: 3500, h: 5250 },
+      { code: "LVWS-7", qty: 1, w: 5200, h: 2530 },
+      { code: "LVWS-7A", qty: 1, w: 5200, h: 2450 },
+      { code: "LVWS-8", qty: 1, w: 3200, h: 2530 },
+      { code: "LVWS-8A", qty: 1, w: 3200, h: 2450 },
+      { code: "LVWS-9", qty: 1, w: 2300, h: 2530 },
+      { code: "LVWS-9A", qty: 1, w: 2300, h: 2450 }
+    ]
+  },
+  { id:"EL7", label:"EL (7)", axis:"Trục 2X12 ~ 2X1", type:"el", note:"Đã cập nhật chuẩn theo bản vẽ EL 7.",
+    panels:[
+      {code:"EWS-10",qty:1,w:5000,h:2530},{code:"EWS-10A",qty:1,w:5000,h:2450},{code:"EWS-11",qty:1,w:3500,h:2530},{code:"EWS-11B",qty:1,w:3500,h:2450},
+      {code:"EWS-3",qty:9,w:2120,h:2530},{code:"EWS-30",qty:12,w:1800,h:5000},{code:"EWS-3A",qty:2,w:2120,h:2450},{code:"EWS-3A-2",qty:6,w:2120,h:2310},
+      {code:"EWS-3B",qty:1,w:2120,h:2450},{code:"EWS-43",qty:24,w:1800,h:2000},{code:"EWS-44",qty:5,w:1800,h:1750},{code:"EWS-5",qty:1,w:1300,h:2530},
+      {code:"EWS-54",qty:5,w:1800,h:1750},{code:"EWS-55",qty:12,w:1600,h:2000},{code:"EWS-57",qty:4,w:1600,h:1525},{code:"EWS-5B-2",qty:1,w:1300,h:2450},
+      {code:"EWS-6.1",qty:2,w:1200,h:2350},{code:"EWS-6.1A-2",qty:3,w:1200,h:2310}
+    ]
+  },
+  { id:"DROPOUT", label:"Drop Out", axis:"Khu vực kỹ thuật / Khe thoáng", type:"dropout", note:"Danh mục tấm theo bản vẽ Drop Out chi tiết.",
+    panels:[
+      {code:"CW-25",qty:1,w:7500,h:2540},{code:"CW-25-1",qty:1,w:7500,h:1190},
+      {code:"CW-25a",qty:1,w:7500,h:2540},{code:"CW-25a-1",qty:1,w:7500,h:1190},
+      {code:"CW-26",qty:2,w:3600,h:2540},{code:"CW-26-1",qty:2,w:3600,h:1190},
+      {code:"CW-27",qty:1,w:3600,h:2540},{code:"CW-27-1",qty:1,w:3600,h:1190},
+      {code:"CW-30",qty:1,w:6160,h:2540},{code:"CW-30-1",qty:1,w:6160,h:1190},
+      {code:"CW-31",qty:1,w:4800,h:2540},{code:"CW-31-1",qty:1,w:4800,h:1190}
+    ]
+  }
+];
 
-  const matchedUser = getLoginUsers_().find(account => {
-    const accountUser = clean_(account.user).toLowerCase();
-    return accountUser === user && clean_(account.password) === pass;
+const DEPARTMENTS = [
+  { id:"design",    name:"Phòng Thiết kế",    short:"Thiết kế",    statuses:["Chưa triển khai","Đang triển khai","Đã hoàn thành bản vẽ","Đã duyệt phát hành"] },
+  { id:"boq",       name:"Phòng Thống kê",    short:"Thống kê",     statuses:["Chưa bóc khối lượng","Đang bóc khối lượng","Đã bóc xong","Đã kiểm tra chéo"] },
+  { id:"qs",        name:"Phòng QS",          short:"QS",           statuses:["Chưa đo bóc","Đang đo bóc / kiểm tra","Đã xác nhận khối lượng","Đã nghiệm thu thanh toán"] },
+  { id:"purchase",   name:"Phòng Mua hàng",    short:"Mua hàng",     statuses:["Chưa đặt hàng","Đã đặt hàng (PO)","Đã về kho","Đã cấp cho xưởng"] },
+  { id:"workshop",   name:"Xưởng Gia công",    short:"Xưởng",        statuses:["Chưa gia công","Đang gia công","Gia công xong","Đã xuất xưởng"] },
+  { id:"sitework",   name:"Phòng Thi công",    short:"Thi công",     statuses:["Chưa bắt đầu","Đang lắp dựng","Đã lắp dựng","Đã nghiệm thu"] },
+];
+const DEPT_MAP = Object.fromEntries(DEPARTMENTS.map(d=>[d.id,d]));
+
+const SITEWORK_DEFAULT_TASKS = [
+  "Lắp khung",
+  "Bơm vữa",
+  "Nghiệm thu khung",
+  "Lắp kính",
+  "Bắn keo",
+  "Lắp phụ kiện",
+  "Vệ sinh",
+  "Bàn giao"
+];
+
+const PDF_TASK_ROWS = [
+  [1,"TIẾN ĐỘ KHỐI ĐẾ GRAND MAHATAN QUẬN 1","", "28/07/2026","10/10/2026"],
+  [2,"A - CÔNG TÁC CHUẨN BỊ","", "28/07/2026","08/09/2026"],
+  [3,"Nhà thầu trình Shop Drawing theo RFI, phê duyệt","design","28/07/2026","29/07/2026"],
+  [4,"Thống kê vật tư RFB và ra Bill of Material (BOM)","boq","30/07/2026","30/07/2026"],
+  [5,"Thống kê vật tư các loại","boq","31/07/2026","31/07/2026"],
+  [6,"Phát hành hồ sơ nguyên vật liệu","design","01/08/2026","03/08/2026"],
+  [7,"Lập bản vẽ gia công Request Of CutList (RFC)","design","01/08/2026","03/08/2026"],
+  [8,"Gửi kế hoạch tới nhà cung cấp","purchase","04/08/2026","05/08/2026"],
+  [9,"7 - CÔNG TÁC ĐẶT HÀNG","purchase","28/07/2026","08/09/2026"],
+  [10,"7.1 Nhôm","purchase","28/07/2026","06/09/2026"],
+  [11,"7.2 Sử dụng nhôm đã đặt từ năm 2022 (thống kê, kiểm kê hàng hóa), thiếu thanh nhôm BK60A cho mặt 3,4,5","purchase","30/07/2026","03/08/2026"],
+  [12,"7.3 Đặt hàng nhôm BK60A","purchase","28/07/2026","11/08/2026"],
+  [13,"7.4 Mặt 1,2,6,7,8,9,10,11","purchase","06/08/2026","30/08/2026"],
+  [14,"8 - Kính","purchase","06/08/2026","02/09/2026"],
+  [15,"8.1 Mặt 3,4,5","purchase","06/08/2026","14/08/2026"],
+  [16,"8.2 Mặt 1,2,6,7,8,9,10,11","purchase","12/08/2026","02/09/2026"],
+  [17,"9 - Vật tư phụ, phụ kiện","purchase","06/08/2026","06/09/2026"],
+  [18,"9.1 Vật tư phụ, phụ kiện","purchase","06/08/2026","06/09/2026"],
+  [19,"10 - CÔNG TÁC GIA CÔNG","workshop","12/08/2026","08/09/2026"],
+  [20,"10.1 Gia công nhôm","workshop","12/08/2026","08/09/2026"],
+  [21,"10.2 Mặt 3,4,5","workshop","12/08/2026","18/08/2026"],
+  [22,"10.3 Mặt 1,2,6,7,8,9,10,11","workshop","01/09/2026","08/09/2026"],
+  [23,"11 - CÔNG TÁC NHẬN MẶT BẰNG KHẢO SÁT NHÔM","sitework","05/08/2026","30/08/2026"],
+  [24,"11.1 Mặt 3,4,5","sitework","05/08/2026","09/08/2026"],
+  [25,"11.2 Mặt 1,2","sitework","25/08/2026","26/08/2026"],
+  [26,"11.3 Mặt 6,7,8","sitework","27/08/2026","28/08/2026"],
+  [27,"11.4 Mặt 9,10,11","sitework","29/08/2026","30/08/2026"],
+  [28,"B - VẬT TƯ VỀ CÔNG TRÌNH","","15/08/2026","17/09/2026"],
+  [29,"15 - Khung bao nhôm","purchase","15/08/2026","17/09/2026"],
+  [30,"15.1 Mặt 3,4,5","purchase","15/08/2026","19/08/2026"],
+  [31,"15.2 Mặt 1,2","purchase","07/09/2026","08/09/2026"],
+  [32,"15.3 Mặt 6,7,8","purchase","09/09/2026","10/09/2026"],
+  [33,"15.4 Mặt 9,10,11","purchase","16/09/2026","17/09/2026"],
+  [34,"16 - Vật tư kính","purchase","16/08/2026","09/09/2026"],
+  [35,"16.1 Mặt 3,4,5","purchase","16/08/2026","20/08/2026"],
+  [36,"16.2 Mặt 1,2","purchase","04/09/2026","05/09/2026"],
+  [37,"16.3 Mặt 6,7,8","purchase","06/09/2026","07/09/2026"],
+  [38,"16.4 Mặt 9,10,11","purchase","08/09/2026","09/09/2026"],
+  [39,"C - CÔNG TÁC NGHIỆM THU","","16/08/2026","18/09/2026"],
+  [40,"17 - NGHIỆM THU VẬT LIỆU ĐẦU VÀO NHÔM","qs","16/08/2026","18/09/2026"],
+  [41,"17.1 Mặt 3,4,5","qs","16/08/2026","20/08/2026"],
+  [42,"17.2 Mặt 1,2","qs","08/09/2026","09/09/2026"],
+  [43,"17.3 Mặt 6,7,8","qs","10/09/2026","11/09/2026"],
+  [44,"17.4 Mặt 9,10,11","qs","17/09/2026","18/09/2026"],
+  [45,"18 - NGHIỆM THU VẬT LIỆU ĐẦU VÀO KÍNH","qs","17/08/2026","11/09/2026"],
+  [46,"18.1 Mặt 3,4,5","qs","17/08/2026","21/08/2026"],
+  [47,"18.2 Mặt 1,2","qs","06/09/2026","07/09/2026"],
+  [48,"18.3 Mặt 6,7,8","qs","08/09/2026","09/09/2026"],
+  [49,"18.4 Mặt 9,10,11","qs","10/09/2026","11/09/2026"],
+  [50,"D - CÔNG TÁC VẬN CHUYỂN","","17/08/2026","19/09/2026"],
+  [51,"19 - Công tác vận chuyển khung nhôm","workshop","17/08/2026","19/09/2026"],
+  [52,"19.1 Mặt 3,4,5","workshop","17/08/2026","21/08/2026"],
+  [53,"19.2 Mặt 1,2","workshop","09/09/2026","10/09/2026"],
+  [54,"19.4 Mặt 6,7,8","workshop","11/09/2026","12/09/2026"],
+  [55,"19.5 Mặt 9,10,11","workshop","18/09/2026","19/09/2026"],
+  [56,"20 - Công tác vận chuyển kính","workshop","20/08/2026","14/09/2026"],
+  [57,"20.1 Mặt 3,4,5","workshop","20/08/2026","24/08/2026"],
+  [58,"20.2 Mặt 1,2","workshop","09/09/2026","10/09/2026"],
+  [59,"20.3 Mặt 6,7,8","workshop","11/09/2026","12/09/2026"],
+  [60,"20.4 Mặt 9,10,11","workshop","13/09/2026","14/09/2026"],
+  [61,"E - CÔNG TÁC LẮP ĐẶT VÀ VỆ SINH","","18/08/2026","30/09/2026"],
+  [62,"21 - LẮP ĐẶT KHUNG NHÔM","sitework","18/08/2026","26/09/2026"],
+  [63,"21.1 Mặt 3,4,5","sitework","18/08/2026","27/08/2026"],
+  [64,"21.2 Mặt 1,2","sitework","10/09/2026","19/09/2026"],
+  [65,"21.3 Mặt 6,7,8","sitework","12/09/2026","19/09/2026"],
+  [66,"21.4 Mặt 9,10,11","sitework","19/09/2026","26/09/2026"],
+  [67,"22 - LẮP ĐẶT KÍNH CÁNH, BẮN KEO","sitework","22/08/2026","30/09/2026"],
+  [68,"22.1 Mặt 3,4,5","sitework","22/08/2026","30/08/2026"],
+  [69,"22.2 Mặt 1,2","sitework","14/09/2026","28/09/2026"],
+  [70,"22.3 Mặt 6,7,8","sitework","16/09/2026","25/09/2026"],
+  [71,"22.4 Mặt 9,10,11","sitework","21/09/2026","30/09/2026"],
+  [72,"23 - LẮP PHỤ KIỆN VÀ VỆ SINH CÔNG NGHIỆP","sitework","27/08/2026","04/10/2026"],
+  [73,"23.1 Mặt 3,4,5","sitework","27/08/2026","30/08/2026"],
+  [74,"23.2 Mặt 1,2","sitework","29/09/2026","02/10/2026"],
+  [75,"23.4 Mặt 6,7,8","sitework","26/09/2026","29/09/2026"],
+  [76,"23.5 Mặt 9,10,11","sitework","01/10/2026","04/10/2026"],
+  [77,"F - NGHIỆM THU BÀN GIAO","","28/08/2026","10/10/2026"],
+  [78,"24.1 Mặt 3,4,5","sitework","28/08/2026","30/08/2026"],
+  [79,"24.2 Mặt 1,2","sitework","06/10/2026","08/10/2026"],
+  [80,"24.3 Mặt 6,7,8","sitework","03/10/2026","05/10/2026"],
+  [81,"24.4 Mặt 9,10,11","sitework","08/10/2026","10/10/2026"]
+];
+
+const DEFAULT_TASKS = PDF_TASK_ROWS.map(([stt, task, dept, start, end]) => ({
+  stt, task, dept, el:"", pct:0, start, end, statusText:"Chưa bắt đầu", subtasks:[]
+}));
+const SCHEDULE_VERSION = 1;
+
+const STORE_KEY = "gma_facade_tracker_v18_schedule";
+const SYNC_DELAY_MS = 700;
+const LIVE_SYNC_MS = 5000;
+let state = null;
+let activeTab = ELEVATIONS[0].id;
+let mainView = "sitework";
+let expandedSubtasks = {};
+let expandedPanelSub = {}; // Bung/thu gọn chi tiết vật tư (Mua hàng) & công tác con (Thi công) theo mã tấm
+let scheduleDeptFilter = "all";
+let syncTimer = null;
+let syncInProgress = false;
+let syncQueued = false;
+let liveSyncTimer = null;
+
+function freshPanel(code, qty, w=0, h=0){
+  const stages = {};
+  DEPARTMENTS.forEach(d=>{
+    const stage = {status:0, note:"", qtyDone:0, subItems:[]};
+    if (d.id === "sitework") {
+      stage.subItems = SITEWORK_DEFAULT_TASKS.map(name => ({ name, done: false }));
+    }
+    stages[d.id] = stage;
   });
-
-  if (!matchedUser) {
-    return { status: "error", message: "User hoặc mật khẩu không đúng." };
-  }
-
-  const departmentName = clean_(matchedUser.department);
-  const expectedDepartmentId = normalizeDepartmentId_(departmentName);
-  const selectedDepartmentId = normalizeDepartmentId_(deptInput);
-
-  if (deptInput && selectedDepartmentId && expectedDepartmentId && selectedDepartmentId !== expectedDepartmentId) {
-    return { status: "error", message: "Phòng ban không khớp với tài khoản này." };
-  }
-
-  return {
-    status: "success",
-    message: "Đăng nhập thành công.",
-    user: matchedUser.user,
-    department: departmentName,
-    departmentId: expectedDepartmentId || selectedDepartmentId || "",
-    name: matchedUser.name || matchedUser.user
-  };
+  return {code, qty, w, h, stages};
 }
 
-function normalizeDepartmentId_(value) {
-  const text = clean_(value).toLowerCase();
-  const departments = [
-    { id: "design", labels: ["phòng thiết kế", "thiet ke", "thiết kế", "design"] },
-    { id: "boq", labels: ["phòng thống kê", "thong ke", "thống kê", "boq"] },
-    { id: "qs", labels: ["phòng qs", "qs", "quản lý chất lượng", "quan ly chat luong"] },
-    { id: "purchase", labels: ["phòng mua hàng", "mua hàng", "purchase"] },
-    { id: "workshop", labels: ["xưởng gia công", "xuong gia cong", "workshop", "gia công"] },
-    { id: "sitework", labels: ["phòng thi công", "thi cong", "sitework", "thi công"] }
-  ];
-
-  const match = departments.find(item => item.labels.some(label => text.includes(label) || label.includes(text)));
-  return match ? match.id : text;
+function ensureStageDefaults(stage, deptId){
+  if (!stage) return { status: 0, note: "", qtyDone: 0, subItems: [] };
+  if (stage.subItems === undefined) stage.subItems = [];
+  if (deptId === "sitework" && (!Array.isArray(stage.subItems) || stage.subItems.length === 0)) {
+    stage.subItems = SITEWORK_DEFAULT_TASKS.map(name => ({ name, done: false }));
+  }
+  return stage;
 }
 
-function normalizeSheetName_(value) {
-  return clean_(value)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]/g, "")
-    .trim();
+function defaultState(){
+  const s = { scheduleVersion: SCHEDULE_VERSION, elevations:{}, tasks: DEFAULT_TASKS.map(t=>({...t, subtasks: t.subtasks.map(st=>({...st}))})) };
+  ELEVATIONS.forEach(el=>{ s.elevations[el.id] = { panels: el.panels.map(p=>freshPanel(p.code,p.qty,p.w||0,p.h||0)) }; });
+  return s;
 }
 
-function findDepartmentSheet_(spreadsheet, department) {
-  const expected = normalizeSheetName_(department.name || department);
-  if (!spreadsheet) return null;
-
-  const allSheets = spreadsheet.getSheets ? spreadsheet.getSheets() : [];
-  for (let i = 0; i < allSheets.length; i += 1) {
-    const sheetName = allSheets[i].getName();
-    const normalized = normalizeSheetName_(sheetName);
-    if (normalized === expected) return allSheets[i];
-
-    if (expected && normalized.includes(expected)) return allSheets[i];
-    if (expected && (expected.includes(normalized) || normalized.includes(expected))) return allSheets[i];
-  }
-
-  return spreadsheet.getSheetByName(department.name) || null;
-}
-
-function readStoredStateFromLegacySheet_(spreadsheet) {
-  if (!spreadsheet) return {};
-
-  const allSheets = spreadsheet.getSheets ? spreadsheet.getSheets() : [];
-  const candidateSheets = [];
-
-  for (let i = 0; i < DEPARTMENTS.length; i += 1) {
-    const dept = DEPARTMENTS[i];
-    const sheet = findDepartmentSheet_(spreadsheet, dept);
-    if (sheet) candidateSheets.push(sheet);
-  }
-
-  if (candidateSheets.length === 0) {
-    for (let i = 0; i < allSheets.length; i += 1) {
-      candidateSheets.push(allSheets[i]);
-    }
-  }
-
-  for (let s = 0; s < candidateSheets.length; s += 1) {
-    const sheet = candidateSheets[s];
-    if (!sheet || sheet.getLastRow() < 1) continue;
-
-    const values = sheet.getDataRange().getValues();
-    for (let row = 0; row < values.length; row += 1) {
-      for (let col = 0; col < values[row].length; col += 1) {
-        const cellValue = values[row][col];
-        const parsed = tryParseStoredJson_(cellValue);
-        if (parsed && (parsed.elevations || parsed.tasks || parsed.scheduleVersion !== undefined)) {
-          return parsed;
-        }
-      }
-    }
-
-    const row1 = sheet.getRange(1, 1, Math.max(1, sheet.getLastRow()), Math.max(1, sheet.getLastColumn())).getDisplayValues();
-    for (let row = 0; row < row1.length; row += 1) {
-      const joined = row1[row].join("").trim();
-      const parsedJoined = tryParseStoredJson_(joined);
-      if (parsedJoined && (parsedJoined.elevations || parsedJoined.tasks || parsedJoined.scheduleVersion !== undefined)) {
-        return parsedJoined;
-      }
-    }
-  }
-
-  return {};
-}
-
-function tryParseStoredJson_(value) {
-  if (value === null || value === undefined) return null;
-  const rawText = String(value).trim();
-  if (!rawText) return null;
-
-  let text = rawText;
-  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
-    text = text.slice(1, -1);
-  }
+function normalizeCloudState(rawData){
+  if (!rawData || typeof rawData !== "object") return null;
 
   const candidates = [
-    text,
-    text.replace(/\\n/g, "").replace(/\\r/g, ""),
-    text.replace(/\n/g, "").replace(/\r/g, ""),
-    text.replace(/^\s*"|"\s*$/g, "")
+    rawData.fullState,
+    rawData.state,
+    rawData.data,
+    rawData
   ];
 
-  for (let i = 0; i < candidates.length; i += 1) {
-    const candidate = candidates[i];
-    if (!candidate || candidate === "null") continue;
-    try {
-      const parsed = JSON.parse(candidate);
-      if (parsed && typeof parsed === "object") return parsed;
-    } catch (error) {
-      // ignore and try next candidate
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object") continue;
+    if (candidate.elevations || candidate.tasks || candidate.scheduleVersion !== undefined) {
+      return candidate;
     }
   }
 
   return null;
 }
 
-function writeDepartmentSheet_(spreadsheet, dept, body) {
-  const sheet = spreadsheet.getSheetByName(dept.name) || spreadsheet.insertSheet(dept.name);
-  const state = body.fullState;
-  const json = JSON.stringify(state);
+// Hàm tải dữ liệu từ Google Sheet khi mở trang web
+async function loadState(){
+  try {
+    if (GOOGLE_SHEET_WEB_APP_URL.startsWith("http")) {
+      const response = await fetch(`${GOOGLE_SHEET_WEB_APP_URL}?_t=${Date.now()}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const cloudData = await response.json();
+      const cloudState = normalizeCloudState(cloudData);
 
-  const rows = [
-    ["TRACKING_STATE_V1"],
-    [body.savedAt || new Date().toISOString()],
-    [json],
-    [],
-    ["Department", "Elevation", "Panel code", "Quantity", "Done", "Status", "Note", "Width mm", "Height mm"]
-  ];
-
-  Object.keys(state.elevations).forEach(elevationId => {
-    const elevation = state.elevations[elevationId];
-    (elevation.panels || []).forEach(panel => {
-      const stage = panel.stages && panel.stages[dept.id]
-        ? panel.stages[dept.id]
-        : { qtyDone: 0, status: 0, note: "" };
-      rows.push([
-        dept.name,
-        elevationId,
-        panel.code || "",
-        panel.qty || 0,
-        stage.qtyDone || 0,
-        stage.status || 0,
-        stage.note || "",
-        panel.w || 0,
-        panel.h || 0
-      ]);
-    });
-  });
-
-  rows.push([]);
-  rows.push(["Schedule tasks"]);
-  rows.push(["Task", "Area", "Start", "End", "Percent", "Status"]);
-  (state.tasks || [])
-    .filter(task => task.dept === dept.id)
-    .forEach(task => rows.push([
-      task.task || "",
-      task.el || "",
-      task.start || "",
-      task.end || "",
-      task.pct || 0,
-      task.statusText || ""
-    ]));
-
-  sheet.clearContents();
-  const columnCount = Math.max(9, Math.max.apply(null, rows.map(row => row.length)));
-  sheet.getRange(1, 1, rows.length, columnCount)
-    .setValues(rows.map(row => row.concat(Array(Math.max(0, columnCount - row.length)).fill(""))));
-  sheet.setFrozenRows(5);
-  sheet.autoResizeColumns(1, 9);
-}
-
-function tuDongTaoSheetTongHop() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const resultSheetName = "TongHopThayDoi";
-
-  let sheetResult = spreadsheet.getSheetByName(resultSheetName);
-  if (!sheetResult) {
-    sheetResult = spreadsheet.insertSheet(resultSheetName);
-  } else {
-    sheetResult.clear();
-  }
-
-  const headers = ["Thời gian cập nhật", "Phòng ban", "Tầng", "Mã Panel", "Số lượng", "Đã làm", "Trạng thái", "Ghi chú", "Rộng", "Cao"];
-  const rows = [headers];
-  const timeStr = new Date().toLocaleString();
-  const depts = ["Thiet ke", "Thong ke", "QS", "Mua hang", "Xuong gia cong", "Thi cong"];
-
-  depts.forEach(function(deptName) {
-    const sheet = spreadsheet.getSheetByName(deptName);
-    if (!sheet) return;
-
-    const lastRow = sheet.getLastRow();
-    if (lastRow < 6) return;
-
-    const savedTime = sheet.getRange(2, 1).getValue() || timeStr;
-    const dataRange = sheet.getRange(6, 1, lastRow - 5, 9).getValues();
-
-    dataRange.forEach(function(row) {
-      const done = Number(row[4]) || 0;
-      const status = Number(row[5]) || 0;
-      const note = String(row[6] || "").trim();
-
-      if (status > 0 || done > 0 || note !== "") {
-        rows.push([
-          savedTime,
-          row[0],
-          row[1],
-          row[2],
-          row[3],
-          done,
-          status,
-          note,
-          row[7],
-          row[8]
-        ]);
+      if (cloudState && (cloudState.elevations || cloudState.tasks || cloudState.scheduleVersion !== undefined)) {
+        const baseState = defaultState();
+        state = {
+          ...baseState,
+          ...cloudState,
+          scheduleVersion: SCHEDULE_VERSION,
+          elevations: {
+            ...baseState.elevations,
+            ...(cloudState.elevations || {})
+          },
+          tasks: Array.isArray(cloudState.tasks) && cloudState.tasks.length ? cloudState.tasks : baseState.tasks
+        };
+        localStorage.setItem(STORE_KEY, JSON.stringify(state));
+        render();
+        return;
       }
+    }
+  } catch (err) {
+    console.log("Không tải được từ Cloud, dùng dữ liệu dưới máy:", err);
+  }
+
+  // Fallback: Nếu chưa có trên mạng thì dùng dữ liệu dưới máy hoặc mặc định
+  try{
+    const savedData = localStorage.getItem(STORE_KEY);
+    if(savedData){
+      state = JSON.parse(savedData);
+      if (!state || !state.elevations) state = defaultState();
+    } else {
+      state = defaultState();
+      saveState();
+    }
+  }catch(e){
+    state = defaultState();
+  }
+  render();
+}
+
+function startLiveSync(){
+  if (liveSyncTimer) return;
+  liveSyncTimer = setInterval(() => {
+    if (document.visibilityState === "visible") {
+      loadState();
+    }
+  }, LIVE_SYNC_MS);
+}
+
+// Hàm đẩy toàn bộ trạng thái lên Google Sheet khi có thay đổi
+function saveState(){
+  try { 
+    localStorage.setItem(STORE_KEY, JSON.stringify(state)); 
+    queueCloudSync();
+  }catch(e){}
+}
+
+function queueCloudSync(){
+  if (!GOOGLE_SHEET_WEB_APP_URL.startsWith("http")) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(flushCloudSync, SYNC_DELAY_MS);
+}
+
+function flushCloudSync(){
+  if (syncInProgress) {
+    syncQueued = true;
+    return;
+  }
+
+  syncInProgress = true;
+  const payload = {
+    action: "save",
+    changedDept: mainView,
+    savedAt: new Date().toISOString(),
+    fullState: state
+  };
+
+  fetch(GOOGLE_SHEET_WEB_APP_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }).catch(err => {
+    console.error("Lỗi đồng bộ Google Sheet:", err);
+  }).finally(() => {
+    syncInProgress = false;
+    if (syncQueued) {
+      syncQueued = false;
+      queueCloudSync();
+    }
+  });
+}
+
+function elProgress(deptId, elId){
+  const panels = state.elevations[elId]?.panels || [];
+  if(panels.length===0) return 0;
+  let total = 0, done = 0;
+  panels.forEach(p=>{
+    total += Number(p.qty) || 0;
+    const s = p.stages[deptId] || {qtyDone:0, status:0};
+    let q = s.qtyDone !== undefined ? Number(s.qtyDone) || 0 : (s.status===3 ? (Number(p.qty) || 0) : 0);
+    done += Math.min(Number(p.qty) || 0, Math.max(0, q));
+  });
+  return total===0 ? 0 : Math.round((done/total)*100);
+}
+
+function deptOverallProgress(deptId){
+  let total=0, done=0;
+  Object.keys(state.elevations).forEach(elId=>{
+    state.elevations[elId].panels.forEach(p=>{
+      total += Number(p.qty) || 0;
+      const s = p.stages[deptId] || {qtyDone:0, status:0};
+      let q = s.qtyDone !== undefined ? Number(s.qtyDone) || 0 : (s.status===3 ? (Number(p.qty) || 0) : 0);
+      done += Math.min(Number(p.qty) || 0, Math.max(0, q));
     });
   });
+  return total===0 ? 0 : Math.round((done/total)*100);
+}
 
-  if (rows.length > 1) {
-    sheetResult.getRange(1, 1, rows.length, headers.length).setValues(rows);
-    sheetResult.setFrozenRows(1);
-    sheetResult.autoResizeColumns(1, headers.length);
+function taskPct(t){
+  if(t.subtasks && t.subtasks.length>0){
+    const done = t.subtasks.filter(s=>s.done).length;
+    return Math.round((done/t.subtasks.length)*100);
+  }
+  return (t.dept && t.el) ? elProgress(t.dept, t.el) : (t.pct||0);
+}
+
+function scheduleProgress(){
+  if(state.tasks.length===0) return 0;
+  return Math.round(state.tasks.reduce((a,t)=>a+taskPct(t),0)/state.tasks.length);
+}
+
+function switchView(v){
+  mainView = v;
+  document.getElementById("viewDept").style.display = v==="schedule" ? "none":"block";
+  document.getElementById("viewSchedule").style.display = v==="schedule" ? "block":"none";
+  if(v==="schedule"){
+    document.getElementById("overallLbl").textContent = "Tiến độ tổng thể (công tác)";
   } else {
-    sheetResult.appendRow(["Hiện tại chưa có hạng mục nào có thay đổi hoặc tiến độ."]);
+    document.getElementById("overallLbl").textContent = "Tiến độ — " + DEPT_MAP[v].name;
   }
+  render();
 }
 
-function saveNhanLuc_(rows) {
-  const sheet = getOrCreateSheet_("NhanLuc", SHEETS.NhanLuc.headers);
-  const values = rows.map(row => [clean_(row.ngay), clean_(row.tang), clean_(row.hangMuc), clean_(row.nhaThau), clean_(row.congTac), clean_(row.soLuong), clean_(row.ghiChu)]);
-  appendUniqueRows_(sheet, values);
+function renderMainNav(){
+  const nav = document.getElementById("mainnav");
+  let html = DEPARTMENTS.map(d=>`<button class="${mainView===d.id?'active':''}" onclick="switchView('${d.id}')">${d.name}</button>`).join("");
+  html += `<span class="sep"></span><button class="${mainView==='schedule'?'active':''}" onclick="switchView('schedule')">Tiến độ khối đế</button>`;
+  nav.innerHTML = html;
 }
 
-function saveBaoCao_(rows) {
-  const sheet = getOrCreateSheet_("BaoCaoCuoiNgay", SHEETS.BaoCaoCuoiNgay.headers);
-  const values = rows.map(row => [clean_(row.ngay), clean_(row.thapTang), clean_(row.hangMuc), clean_(row.nhaThau), clean_(row.congTac), clean_(row.can), clean_(row.tienDo), clean_(row.trangThai), clean_(row.ghiChu)]);
-  removeDuplicateBaoCaoRows_(sheet);
-  upsertRows_(sheet, values, row => row.slice(0, 5));
+function renderLegend(){
+  const dept = DEPT_MAP[mainView];
+  const legend = document.getElementById("legend");
+  if(!dept){ legend.innerHTML=""; return; }
+  legend.innerHTML = dept.statuses.map((lbl,i)=>`<span><i class="dot" style="background:var(--s${i})"></i>${lbl}</span>`).join("") +
+    `<span style="color:var(--paper)">— Bấm vào trạng thái để chuyển vòng</span>`;
 }
 
-function removeDuplicateBaoCaoRows_(sheet) {
-  if (sheet.getLastRow() < 3) return;
-  const width = SHEETS.BaoCaoCuoiNgay.headers.length;
-  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, width).getDisplayValues();
-  const seen = new Set();
-  const duplicateRows = [];
-  for (let index = values.length - 1; index >= 0; index -= 1) {
-    const row = values[index];
-    const key = makeKey_(row.slice(0, 5));
-    if (seen.has(key)) duplicateRows.push(index + 2);
-    else seen.add(key);
+function renderTabs(){
+  const tabsEl = document.getElementById("tabs");
+  tabsEl.innerHTML = "";
+  ELEVATIONS.forEach(el=>{
+    const pct = elProgress(mainView, el.id);
+    const div = document.createElement("div");
+    div.className = "tab" + (el.id===activeTab ? " active":"");
+    div.innerHTML = `<span>${el.label}</span><span style="color:var(--muted);font-size:10.5px">${el.type==='dropout'?'Drop Out':'Mặt đứng'}</span><div class="bar"><i style="width:${pct}%"></i></div><span style="font-size:10.5px">${pct}%</span>`;
+    div.onclick = ()=>{ activeTab = el.id; render(); };
+    tabsEl.appendChild(div);
+  });
+}
+
+function renderSummary(){
+  const dept = DEPT_MAP[mainView];
+  const isQS = (mainView === 'qs');
+  document.getElementById("summaryTitle").textContent = isQS ? "Tổng hợp khối lượng & Diện tích — Phòng QS" : "Tổng hợp khối lượng — " + dept.name;
+  const head = document.getElementById("summaryHead");
+  
+  if(isQS){
+    head.innerHTML = `<tr>
+      <th>Khu vực / Mặt đứng</th>
+      <th style="text-align:right">Tổng khung</th>
+      <th style="text-align:right">SL Đã xong</th>
+      <th style="text-align:right">Tổng diện tích</th>
+      <th style="text-align:right">% Hoàn thành</th>
+      ${dept.statuses.map(l=>`<th style="text-align:right">${l}</th>`).join("")}
+    </tr>`;
+  } else {
+    head.innerHTML = `<tr>
+      <th>Khu vực / Mặt đứng</th>
+      <th style="text-align:right">Tổng khung</th>
+      <th style="text-align:right">SL Đã xong</th>
+      <th style="text-align:right">% Hoàn thành</th>
+      ${dept.statuses.map(l=>`<th style="text-align:right">${l}</th>`).join("")}
+    </tr>`;
   }
-  duplicateRows.forEach(rowNumber => sheet.deleteRow(rowNumber));
-}
 
-function saveHandover_(rows, userId) {
-  if (!isValidUserId_(userId)) throw new Error("ID khong hop le");
-  const sheet = ensureHandoverSheet_();
-  const values = rows.map(row => [clean_(row.thap), clean_(row.tang), clean_(row.ngayBatDau), clean_(row.ngayDuKien), clean_(row.trangThai), clean_(row.ghiChu), clean_(row.ngayCapNhat), clean_(row.id) || createHandoverId_(row.thap, row.tang)]);
-  upsertRows_(sheet, values, row => [row[7] || row[0], row[7] ? "" : row[1]]);
-}
+  const body = document.getElementById("summaryBody");
+  let rows = "";
+  let gTot=0, gDone=0, gArea=0, gC=[0,0,0,0];
 
-function getOrCreateSheet_(name, headers) {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = spreadsheet.getSheetByName(name);
-  if (!sheet) sheet = spreadsheet.insertSheet(name);
-  if (sheet.getLastRow() === 0) {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    sheet.setFrozenRows(1);
-  } else if (sheet.getLastColumn() < headers.length) {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  }
-  return sheet;
-}
-
-function readSheet_(name, config) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  const width = config.fields.length;
-  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, width).getDisplayValues();
-  return values.filter(row => row.some(value => clean_(value))).map(row => {
-    const item = {};
-    config.fields.forEach((field, index) => item[field] = clean_(row[index]));
-    return item;
-  });
-}
-
-function appendUniqueRows_(sheet, values) {
-  if (!values.length) return;
-  const width = values[0].length;
-  const existing = sheet.getLastRow() < 2 ? [] : sheet.getRange(2, 1, sheet.getLastRow() - 1, width).getDisplayValues();
-  const keys = new Set(existing.map(row => makeKey_(row)));
-  const newRows = values.filter(row => {
-    const key = makeKey_(row);
-    if (keys.has(key)) return false;
-    keys.add(key);
-    return true;
-  });
-  appendRows_(sheet, newRows);
-}
-
-function upsertRows_(sheet, values, keyParts) {
-  if (!values.length) return;
-  const width = values[0].length;
-  const existing = sheet.getLastRow() < 2 ? [] : sheet.getRange(2, 1, sheet.getLastRow() - 1, width).getDisplayValues();
-  const rowNumbers = new Map();
-  existing.forEach((row, index) => rowNumbers.set(makeKey_(keyParts(row)), index + 2));
-
-  const rowsToAppend = [];
-  values.forEach(row => {
-    const key = makeKey_(keyParts(row));
-    const rowNumber = rowNumbers.get(key);
-    if (rowNumber) sheet.getRange(rowNumber, 1, 1, width).setValues([row]);
-    else {
-      rowsToAppend.push(row);
-      rowNumbers.set(key, sheet.getLastRow() + rowsToAppend.length + 1);
-    }
-  });
-  appendRows_(sheet, rowsToAppend);
-}
-
-function appendRows_(sheet, rows) {
-  if (rows.length) sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-}
-
-function ensureHandoverSheet_() {
-  const sheet = getOrCreateSheet_("TienDoGiaoNha", SHEETS.TienDoGiaoNha.headers);
-  if (sheet.getLastRow() < 2) return sheet;
-  const range = sheet.getRange(2, 1, sheet.getLastRow() - 1, 8);
-  const values = range.getValues();
-  let changed = false;
-  values.forEach(row => {
-    if (!clean_(row[7])) {
-      row[7] = createHandoverId_(row[0], row[1]);
-      changed = true;
-    }
-  });
-  if (changed) range.setValues(values);
-  return sheet;
-}
-
-function isValidUserId_(userId) {
-  const id = clean_(userId);
-  return id !== "" && readUserIds_().includes(id);
-}
-
-function readUserIds_() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEETS.User.name);
-  if (!sheet || sheet.getLastRow() < 2) return [];
-
-  const values = sheet.getDataRange().getDisplayValues();
-  const ignoredHeaders = ["id", "user id", "userid", "ma", "ma nhan vien"];
-  return values.slice(1).reduce((ids, row) => {
-    row.forEach(value => {
-      const id = clean_(value);
-      if (id && !ignoredHeaders.includes(id.toLowerCase()) && !ids.includes(id)) ids.push(id);
+  ELEVATIONS.forEach(el=>{
+    const panels = state.elevations[el.id]?.panels || [];
+    let tot=0, done=0, area=0, c=[0,0,0,0];
+    panels.forEach(p=>{
+      const qVal = Number(p.qty) || 0;
+      tot += qVal;
+      const pArea = ((Number(p.w) || 0) * (Number(p.h) || 0) * qVal) / 1000000;
+      area += pArea;
+      const s = p.stages[dept.id] || {qtyDone:0, status:0};
+      let q = s.qtyDone !== undefined ? Number(s.qtyDone) || 0 : (s.status===3 ? qVal : 0);
+      const safeQ = Math.min(qVal, Math.max(0, q));
+      done += safeQ;
+      
+      const stIdx = Number(s.status) || 0;
+      c[stIdx] += qVal;
     });
-    return ids;
-  }, []);
+    gTot += tot; gDone += done; gArea += area;
+    c.forEach((v,i)=>gC[i]+=v);
+    const pct = tot === 0 ? 0 : Math.round((done / tot) * 100);
+
+    if(isQS){
+      rows += `<tr>
+        <td class="code">${el.label}</td>
+        <td style="text-align:right">${tot}</td>
+        <td style="text-align:right; color:var(--s3); font-weight:600;">${done}</td>
+        <td style="text-align:right; font-family:'Consolas','Courier New',monospace; color:var(--blueprint); font-weight:600;">${area.toFixed(2)} m²</td>
+        <td style="text-align:right; font-weight:600;">${pct}%</td>
+        ${c.map((v,i)=>`<td style="text-align:right;color:var(--s${i})">${v}</td>`).join("")}
+      </tr>`;
+    } else {
+      rows += `<tr>
+        <td class="code">${el.label}</td>
+        <td style="text-align:right">${tot}</td>
+        <td style="text-align:right; color:var(--s3); font-weight:600;">${done}</td>
+        <td style="text-align:right; font-weight:600;">${pct}%</td>
+        ${c.map((v,i)=>`<td style="text-align:right;color:var(--s${i})">${v}</td>`).join("")}
+      </tr>`;
+    }
+  });
+
+  const gPct = gTot === 0 ? 0 : Math.round((gDone / gTot) * 100);
+  if(isQS){
+    rows += `<tr style="font-weight:700;border-top:1px solid var(--blueprint)">
+      <td class="code">TỔNG</td>
+      <td style="text-align:right">${gTot}</td>
+      <td style="text-align:right; color:var(--s3);">${gDone}</td>
+      <td style="text-align:right; color:var(--blueprint);">${gArea.toFixed(2)} m²</td>
+      <td style="text-align:right">${gPct}%</td>
+      ${gC.map((v,i)=>`<td style="text-align:right;color:var(--s${i})">${v}</td>`).join("")}
+    </tr>`;
+  } else {
+    rows += `<tr style="font-weight:700;border-top:1px solid var(--blueprint)">
+      <td class="code">TỔNG</td>
+      <td style="text-align:right">${gTot}</td>
+      <td style="text-align:right; color:var(--s3);">${gDone}</td>
+      <td style="text-align:right">${gPct}%</td>
+      ${gC.map((v,i)=>`<td style="text-align:right;color:var(--s${i})">${v}</td>`).join("")}
+    </tr>`;
+  }
+  body.innerHTML = rows;
 }
 
-function createHandoverId_(tower, floor) {
-  return "GN-" + clean_(tower).replace(/[^A-Za-z0-9]/g, "") + "-" + clean_(floor).replace(/[^A-Za-z0-9]/g, "");
+function cycleStatus(elId, idx){
+  if (!requireDepartmentEditPermission(mainView)) return;
+  const p = state.elevations[elId].panels[idx];
+  const s = p.stages[mainView];
+  s.status = (s.status+1)%4;
+  if(s.status === 3) s.qtyDone = p.qty;
+  else if(s.status === 0) s.qtyDone = 0;
+  
+  syncToGoogleSheet(mainView, p.code, "Chuyển trạng thái: " + DEPT_MAP[mainView].statuses[s.status]);
+  
+  saveState(); render();
 }
 
-function makeKey_(parts) {
-  return parts.map(value => clean_(value).toLowerCase()).join("\u001f");
+function updateQtyDone(elId, idx, val){
+  if (!requireDepartmentEditPermission(mainView)) return;
+  const n = parseInt(val,10);
+  const p = state.elevations[elId].panels[idx];
+  const s = p.stages[mainView];
+  s.qtyDone = isNaN(n)?0:Math.min(p.qty, Math.max(0, n));
+  if(s.qtyDone === p.qty) s.status = 3;
+  else if(s.qtyDone > 0) s.status = 2;
+  else s.status = 0;
+  
+  syncToGoogleSheet(mainView, p.code, "Cập nhật SL xong: " + s.qtyDone + "/" + p.qty);
+  
+  saveState(); render();
 }
 
-function clean_(value) {
-  return String(value == null ? "" : value).trim();
+function updateNote(elId, idx, val){
+  if (!requireDepartmentEditPermission(mainView)) return;
+  state.elevations[elId].panels[idx].stages[mainView].note = val; saveState();
+}
+function deletePanel(elId, idx){
+  if (!requireDepartmentEditPermission(mainView)) return;
+  state.elevations[elId].panels.splice(idx,1); saveState(); render();
+}
+function addPanel(elId){
+  if (!requireDepartmentEditPermission(mainView)) return;
+  const codeIn=document.getElementById("newCode"), qtyIn=document.getElementById("newQty");
+  const wIn=document.getElementById("newW"), hIn=document.getElementById("newH");
+  const code=codeIn.value.trim().toUpperCase(); 
+  const qty=parseInt(qtyIn.value,10)||1;
+  const w=wIn?parseInt(wIn.value,10)||0:0;
+  const h=hIn?parseInt(hIn.value,10)||0:0;
+  if(!code) return;
+  state.elevations[elId].panels.push(freshPanel(code, qty, w, h));
+  codeIn.value=""; qtyIn.value="1"; if(wIn) wIn.value=""; if(hIn) hIn.value=""; 
+  saveState(); render();
 }
 
-function jsonResponse_(body) {
-  return ContentService.createTextOutput(JSON.stringify(body)).setMimeType(ContentService.MimeType.JSON);
+function renderPanel(){
+  const el = ELEVATIONS.find(e=>e.id===activeTab);
+  const dept = DEPT_MAP[mainView];
+  const body = document.getElementById("panelBody");
+  const panels = state.elevations[el.id]?.panels || [];
+  const isQS = (mainView === 'qs');
+  const isPurchase = (mainView === 'purchase');
+  const isSitework = (mainView === 'sitework');
+  const hasDetail = isPurchase || isSitework;
+
+  let rows = panels.map((p,idx)=>{
+    const s = p.stages[dept.id] || {status:0, note:"", qtyDone:0, subItems:[]};
+    ensureStageDefaults(s, dept.id);
+    p.stages[dept.id] = s;
+    const qDone = s.qtyDone !== undefined ? s.qtyDone : (s.status===3 ? p.qty : 0);
+    const rowPct = p.qty === 0 ? 0 : Math.round((qDone / p.qty) * 100);
+    const area = ((p.w || 0) * (p.h || 0) * p.qty) / 1000000;
+    const subKey = el.id+'_'+idx;
+    const subOpen = !!expandedPanelSub[subKey];
+
+    let detailCell = "";
+    if(isPurchase){
+      detailCell = `<td><button class="toggle-sub" onclick="togglePanelSub('${el.id}',${idx})">${subOpen?'Ẩn':'Vật tư'} (${s.subItems.length})</button></td>`;
+    } else if(isSitework){
+      const doneCnt = s.subItems.filter(x=>x.done).length;
+      detailCell = `<td><button class="toggle-sub" onclick="togglePanelSub('${el.id}',${idx})">${subOpen?'Ẩn':'Công tác'} (${doneCnt}/${s.subItems.length})</button></td>`;
+    }
+
+    let mainRow;
+    if(isQS){
+      mainRow = `<tr>
+        <td class="code">${p.code}</td>
+        <td><input type="number" class="dim-input" value="${p.w || ''}" disabled></td>
+        <td><input type="number" class="dim-input" value="${p.h || ''}" disabled></td>
+        <td><input type="number" class="qty-input" value="${p.qty}" disabled></td>
+        <td style="font-family:'Consolas','Courier New',monospace; color:var(--blueprint); font-weight:600;">${area.toFixed(2)} m²</td>
+        <td><input type="number" class="qty-input" value="${qDone}" min="0" max="${p.qty}" onchange="updateQtyDone('${el.id}',${idx},this.value)" style="color:var(--s3); font-weight:600;"></td>
+        <td style="font-weight:600;">${rowPct}%</td>
+        <td><button class="status-btn st-${s.status}" onclick="cycleStatus('${el.id}',${idx})">${dept.statuses[s.status]}</button></td>
+        <td><input type="text" class="note-input" placeholder="Ghi chú..." value="${(s.note||'').replace(/"/g,'&quot;')}" onchange="updateNote('${el.id}',${idx},this.value)"></td>
+        <td><button class="del-btn" onclick="deletePanel('${el.id}',${idx})" title="Xoá">✕</button></td>
+      </tr>`;
+    } else {
+      mainRow = `<tr>
+        <td class="code">${p.code}</td>
+        <td><input type="number" class="dim-input" value="${p.w || ''}" disabled></td>
+        <td><input type="number" class="dim-input" value="${p.h || ''}" disabled></td>
+        <td><input type="number" class="qty-input" value="${p.qty}" disabled></td>
+        <td><input type="number" class="qty-input" value="${qDone}" min="0" max="${p.qty}" onchange="updateQtyDone('${el.id}',${idx},this.value)" style="color:var(--s3); font-weight:600;"></td>
+        <td style="font-weight:600;">${rowPct}%</td>
+        <td><button class="status-btn st-${s.status}" onclick="cycleStatus('${el.id}',${idx})">${dept.statuses[s.status]}</button></td>
+        <td><input type="text" class="note-input" placeholder="Ghi chú..." value="${(s.note||'').replace(/"/g,'&quot;')}" onchange="updateNote('${el.id}',${idx},this.value)"></td>
+        ${hasDetail ? detailCell : ""}
+        <td><button class="del-btn" onclick="deletePanel('${el.id}',${idx})" title="Xoá">✕</button></td>
+      </tr>`;
+    }
+
+    let subRow = "";
+    if(subOpen && isPurchase){
+      subRow = `<tr><td colspan="${isQS?10:(hasDetail?10:9)}" style="background:rgba(0,0,0,0.12);padding:0;"><div class="subtask-container">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Vật tư cho mã <b style="color:var(--paper)">${p.code}</b> — có thể chèn thêm dòng vật tư chính / phụ</div>
+        ${s.subItems.map((m,mIdx)=>`
+          <div class="subtask-item">
+            <select class="sel-input" style="width:78px" onchange="updateMaterialField('${el.id}',${idx},${mIdx},'type',this.value)">
+              <option value="main" ${m.type!=='aux'?'selected':''}>Chính</option>
+              <option value="aux" ${m.type==='aux'?'selected':''}>Phụ</option>
+            </select>
+            <input type="text" value="${(m.name||'').replace(/"/g,'&quot;')}" placeholder="Tên vật tư..." onchange="updateMaterialField('${el.id}',${idx},${mIdx},'name',this.value)">
+            <input type="number" value="${m.qty||0}" min="0" style="width:70px;flex:none;background:var(--panel);border:1px solid var(--line);color:var(--paper);border-radius:4px;padding:3px 5px;" onchange="updateMaterialField('${el.id}',${idx},${mIdx},'qty',this.value)">
+            <input type="text" value="${(m.unit||'').replace(/"/g,'&quot;')}" placeholder="ĐVT" style="width:56px;flex:none;background:var(--panel);border:1px solid var(--line);color:var(--paper);border-radius:4px;padding:3px 5px;" onchange="updateMaterialField('${el.id}',${idx},${mIdx},'unit',this.value)">
+            <button class="del-btn" style="padding:2px 6px;font-size:10px" onclick="deleteMaterial('${el.id}',${idx},${mIdx})">Xoá</button>
+          </div>`).join("")}
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+          <select id="matType_${el.id}_${idx}" class="sel-input" style="width:78px"><option value="main">Chính</option><option value="aux">Phụ</option></select>
+          <input type="text" id="matName_${el.id}_${idx}" placeholder="Tên vật tư mới..." style="flex:1;min-width:160px;background:var(--panel);border:1px solid var(--line);color:var(--paper);border-radius:5px;padding:6px 8px;font-family:'Consolas','Courier New',monospace;font-size:12.5px;">
+          <input type="number" id="matQty_${el.id}_${idx}" placeholder="SL" style="width:70px;background:var(--panel);border:1px solid var(--line);color:var(--paper);border-radius:5px;padding:6px 8px;font-family:'Consolas','Courier New',monospace;font-size:12.5px;">
+          <input type="text" id="matUnit_${el.id}_${idx}" placeholder="ĐVT" style="width:56px;background:var(--panel);border:1px solid var(--line);color:var(--paper);border-radius:5px;padding:6px 8px;font-family:'Consolas','Courier New',monospace;font-size:12.5px;">
+          <button onclick="addMaterial('${el.id}',${idx})">+ Thêm vật tư</button>
+        </div>
+      </div></td></tr>`;
+    } else if(subOpen && isSitework){
+      subRow = `<tr><td colspan="${hasDetail?10:9}" style="background:rgba(0,0,0,0.12);padding:0;"><div class="subtask-container">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Công tác thi công cho mã <b style="color:var(--paper)">${p.code}</b> — vd: lắp khung, lắp kính, bắn silicon...</div>
+        ${s.subItems.map((st,tIdx)=>`
+          <div class="subtask-item">
+            <input type="checkbox" ${st.done?'checked':''} onchange="toggleSiteTaskDone('${el.id}',${idx},${tIdx})">
+            <input type="text" value="${(st.name||'').replace(/"/g,'&quot;')}" placeholder="Tên công tác..." onchange="updateSiteTaskName('${el.id}',${idx},${tIdx},this.value)">
+            <button class="del-btn" style="padding:2px 6px;font-size:10px" onclick="deleteSiteTask('${el.id}',${idx},${tIdx})">Xoá</button>
+          </div>`).join("")}
+        <div style="margin-top:6px;display:flex;gap:6px;">
+          <input type="text" id="siteTask_${el.id}_${idx}" placeholder="Thêm công tác mới (lắp khung, lắp kính, bắn silicon...)" style="flex:1;background:var(--panel);border:1px solid var(--line);color:var(--paper);border-radius:5px;padding:6px 8px;font-family:'Consolas','Courier New',monospace;font-size:12.5px;">
+          <button onclick="addSiteTask('${el.id}',${idx})">+ Thêm công tác</button>
+        </div>
+      </div></td></tr>`;
+    }
+
+    return mainRow + subRow;
+  }).join("");
+
+  const colspanVal = isQS ? 10 : (hasDetail ? 10 : 9);
+  if(panels.length===0) rows = `<tr><td colspan="${colspanVal}" style="color:var(--muted);padding:16px 8px;">Chưa có mã tấm nào.</td></tr>`;
+  
+  let theadHTML = "";
+  if(isQS){
+    theadHTML = `<tr>
+      <th style="width:15%">Mã tấm</th>
+      <th style="width:9%">Rộng (mm)</th>
+      <th style="width:9%">Cao (mm)</th>
+      <th style="width:9%">Tổng SL</th>
+      <th style="width:11%">Diện tích (m²)</th>
+      <th style="width:9%">SL Đã xong</th>
+      <th style="width:8%">% Hoàn thành</th>
+      <th style="width:16%">Trạng thái</th>
+      <th style="width:18%">Ghi chú / Thuyết minh</th>
+      <th style="width:4%"></th>
+    </tr>`;
+  } else if(hasDetail){
+    theadHTML = `<tr>
+      <th style="width:15%">Mã tấm</th>
+      <th style="width:9%">Rộng (mm)</th>
+      <th style="width:9%">Cao (mm)</th>
+      <th style="width:9%">Tổng SL</th>
+      <th style="width:9%">SL Đã xong</th>
+      <th style="width:8%">% Hoàn thành</th>
+      <th style="width:16%">Trạng thái</th>
+      <th style="width:15%">Ghi chú / Thuyết minh</th>
+      <th style="width:10%">${isPurchase?'Vật tư':'Công tác'}</th>
+      <th style="width:4%"></th>
+    </tr>`;
+  } else {
+    theadHTML = `<tr>
+      <th style="width:18%">Mã tấm</th>
+      <th style="width:10%">Rộng (mm)</th>
+      <th style="width:10%">Cao (mm)</th>
+      <th style="width:10%">Tổng SL</th>
+      <th style="width:10%">SL Đã xong</th>
+      <th style="width:8%">% Hoàn thành</th>
+      <th style="width:18%">Trạng thái</th>
+      <th style="width:18%">Ghi chú / Thuyết minh</th>
+      <th style="width:8%"></th>
+    </tr>`;
+  }
+
+  body.innerHTML = `<p class="axis-name">${el.label} — ${el.axis}</p>
+    <p class="axis-note">${el.note || ''}</p>
+    <table><thead>${theadHTML}</thead><tbody>${rows}</tbody></table>
+    <div class="row-add">
+      <input type="text" id="newCode" class="code-in" placeholder="Mã tấm mới">
+      <input type="number" id="newW" class="dim-in" placeholder="Rộng mm">
+      <input type="number" id="newH" class="dim-in" placeholder="Cao mm">
+      <input type="number" id="newQty" class="qty-in" value="1" min="1" placeholder="SL">
+      <button onclick="addPanel('${el.id}')">+ Thêm mã tấm</button>
+    </div>`;
 }
+
+function togglePanelSub(elId, idx){
+  const key = elId+'_'+idx;
+  expandedPanelSub[key] = !expandedPanelSub[key];
+  render();
+}
+
+function addMaterial(elId, idx){
+  if (!requireDepartmentEditPermission("purchase")) return;
+  const nameIn = document.getElementById('matName_'+elId+'_'+idx);
+  const typeIn = document.getElementById('matType_'+elId+'_'+idx);
+  const qtyIn = document.getElementById('matQty_'+elId+'_'+idx);
+  const unitIn = document.getElementById('matUnit_'+elId+'_'+idx);
+  if(!nameIn) return;
+  const name = nameIn.value.trim();
+  if(!name) return;
+  const qty = parseInt(qtyIn.value,10)||0;
+  const type = typeIn.value;
+  const unit = unitIn.value.trim();
+  const p = state.elevations[elId].panels[idx];
+  if(!p.stages['purchase'].subItems) p.stages['purchase'].subItems = [];
+  p.stages['purchase'].subItems.push({name, type, qty, unit});
+  syncToGoogleSheet('purchase', p.code, "Thêm vật tư: " + name + " (SL " + qty + (unit?(' '+unit):'') + ")");
+  saveState(); render();
+}
+
+function deleteMaterial(elId, idx, mIdx){
+  if (!requireDepartmentEditPermission("purchase")) return;
+  state.elevations[elId].panels[idx].stages['purchase'].subItems.splice(mIdx,1);
+  saveState(); render();
+}
+
+function updateMaterialField(elId, idx, mIdx, field, val){
+  if (!requireDepartmentEditPermission("purchase")) return;
+  const item = state.elevations[elId].panels[idx].stages['purchase'].subItems[mIdx];
+  item[field] = (field==='qty') ? (parseInt(val,10)||0) : val;
+  saveState();
+}
+
+function addSiteTask(elId, idx){
+  if (!requireDepartmentEditPermission("sitework")) return;
+  const nameIn = document.getElementById('siteTask_'+elId+'_'+idx);
+  if(!nameIn) return;
+  const name = nameIn.value.trim();
+  if(!name) return;
+  const p = state.elevations[elId].panels[idx];
+  if(!p.stages['sitework'].subItems) p.stages['sitework'].subItems = [];
+  p.stages['sitework'].subItems.push({name, done:false});
+  syncToGoogleSheet('sitework', p.code, "Thêm công tác: " + name);
+  saveState(); render();
+}
+
+function toggleSiteTaskDone(elId, idx, tIdx){
+  if (!requireDepartmentEditPermission("sitework")) return;
+  const item = state.elevations[elId].panels[idx].stages['sitework'].subItems[tIdx];
+  item.done = !item.done;
+  saveState(); render();
+}
+
+function deleteSiteTask(elId, idx, tIdx){
+  if (!requireDepartmentEditPermission("sitework")) return;
+  state.elevations[elId].panels[idx].stages['sitework'].subItems.splice(tIdx,1);
+  saveState(); render();
+}
+
+function updateSiteTaskName(elId, idx, tIdx, val){
+  if (!requireDepartmentEditPermission("sitework")) return;
+  state.elevations[elId].panels[idx].stages['sitework'].subItems[tIdx].name = val;
+  saveState();
+}
+
+function renderSchedule(){
+  const body = document.getElementById("scheduleBody");
+  const scheduleTabs = document.getElementById("scheduleTabs");
+  scheduleTabs.innerHTML = `<button class="${scheduleDeptFilter==='all'?'active':''}" onclick="setScheduleDept('all')">Tất cả</button>` +
+    DEPARTMENTS.map(d=>`<button class="${scheduleDeptFilter===d.id?'active':''}" onclick="setScheduleDept('${d.id}')">${d.short}</button>`).join('');
+  const visibleTasks = state.tasks
+    .map((task, index) => ({task, index}))
+    .filter(item => scheduleDeptFilter === 'all' || item.task.dept === scheduleDeptFilter);
+  if(visibleTasks.length===0){
+    body.innerHTML = `<tr><td colspan="8" style="color:var(--muted);padding:16px;">Chưa có công việc trong tab này.</td></tr>`;
+    return;
+  }
+  let html = "";
+  visibleTasks.forEach(({task:t, index:i})=>{
+    const p = taskPct(t);
+    const isExpanded = expandedSubtasks[i];
+    html += `<tr>
+      <td class="code">${t.stt || i+1}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input type="text" class="task-input" value="${t.task.replace(/"/g,'&quot;')}" onchange="updateTaskField(${i},'task',this.value)">
+          ${t.subtasks && t.subtasks.length>0 ? `<button class="toggle-sub" onclick="toggleSub(${i})">${isExpanded ? 'Ẩn con' : 'DS con('+t.subtasks.length+')'}</button>`:''}
+        </div>
+      </td>
+      <td><select class="sel-input" onchange="updateTaskField(${i},'dept',this.value)">
+        <option value="">-- Chọn PB --</option>
+        ${DEPARTMENTS.map(d=>`<option value="${d.id}" ${t.dept===d.id?'selected':''}>${d.short}</option>`).join('')}
+      </select></td>
+      <td><input type="text" class="date-input" value="${t.start||''}" onchange="updateTaskField(${i},'start',this.value)"></td>
+      <td><input type="text" class="date-input" value="${t.end||''}" onchange="updateTaskField(${i},'end',this.value)"></td>
+      <td>
+        <div class="barcell">
+          <div class="mini-bar"><i style="width:${p}%"></i></div>
+          <span style="font-family:'Consolas','Courier New',monospace;font-size:12px">${p}%</span>
+        </div>
+      </td>
+      <td><input type="text" class="status-text-input" value="${(t.statusText||'').replace(/"/g,'&quot;')}" placeholder="Trạng thái..." onchange="updateTaskField(${i},'statusText',this.value)"></td>
+      <td style="white-space:nowrap;">
+        <button class="toggle-sub" onclick="insertTaskAfter(${i})" title="Chèn công việc sau dòng này">+</button>
+        <button class="del-btn" onclick="deleteTask(${i})" title="Xoá công việc">✕</button>
+      </td>
+    </tr>`;
+
+    if(isExpanded && t.subtasks){
+      html += `<tr><td colspan="8" style="background:rgba(0,0,0,0.12);padding:0;"><div class="subtask-container">`;
+      t.subtasks.forEach((st, stIdx)=>{
+        html += `<div class="subtask-item">
+          <input type="checkbox" ${st.done?'checked':''} onchange="toggleSubtask(${i},${stIdx})">
+          <input type="text" value="${st.name.replace(/"/g,'&quot;')}" onchange="updateSubtaskName(${i},${stIdx},this.value)" placeholder="Tên công tác con...">
+          <button class="del-btn" style="padding:2px 6px;font-size:10px" onclick="deleteSubtask(${i},${stIdx})">Xoá con</button>
+        </div>`;
+      });
+      html += `<div style="margin-top:6px;display:flex;gap:6px;">
+        <input type="text" id="newSub_${i}" placeholder="Thêm công tác con mới..." style="flex:1;background:var(--panel);border:1px solid var(--line);color:var(--paper);padding:3px 6px;border-radius:4px;font-size:12px;">
+        <button class="row-add button" style="padding:3px 8px;font-size:11px;" onclick="addSubtask(${i})">+ Thêm con</button>
+      </div></div></td></tr>`;
+    }
+  });
+  body.innerHTML = html;
+}
+
+function setScheduleDept(deptId){ scheduleDeptFilter = deptId; renderSchedule(); }
+function updateTaskField(i, field, val){
+  if (!requireDepartmentEditPermission(state.tasks[i].dept || mainView)) return;
+  state.tasks[i][field] = val; saveState(); render();
+}
+function deleteTask(i){
+  if (!requireDepartmentEditPermission(state.tasks[i].dept || mainView)) return;
+  state.tasks.splice(i,1); saveState(); render();
+}
+function insertTaskAfter(i){
+  if (!requireDepartmentEditPermission(state.tasks[i].dept || mainView)) return;
+  const current = state.tasks[i];
+  state.tasks.splice(i + 1, 0, {
+    stt: "",
+    task: "Công việc mới",
+    dept: current.dept || (scheduleDeptFilter === "all" ? "" : scheduleDeptFilter),
+    el: "",
+    pct: 0,
+    start: current.start || "",
+    end: current.end || "",
+    statusText: "Chưa bắt đầu",
+    subtasks: []
+  });
+  saveState();
+  render();
+}
+function addTask(){
+  if (!requireDepartmentEditPermission(scheduleDeptFilter === "all" ? currentUser.departmentId || mainView : scheduleDeptFilter)) return;
+  const inp = document.getElementById("newTask");
+  const val = inp.value.trim();
+  if(!val) return;
+  const subtask = document.getElementById("newSubtask").value.trim();
+  const start = document.getElementById("newTaskStart").value.trim();
+  const end = document.getElementById("newTaskEnd").value.trim();
+  const dept = scheduleDeptFilter === "all" ? "" : scheduleDeptFilter;
+  state.tasks.push({task:val, dept, el:"", pct:0, start, end, statusText:"Chưa bắt đầu", subtasks:subtask ? [{name:subtask, done:false}] : []});
+  inp.value = "";
+  document.getElementById("newSubtask").value = "";
+  document.getElementById("newTaskStart").value = "";
+  document.getElementById("newTaskEnd").value = "";
+  saveState(); render();
+}
+function toggleSub(i){ expandedSubtasks[i] = !expandedSubtasks[i]; render(); }
+function toggleSubtask(i, stIdx){
+  if (!requireDepartmentEditPermission(state.tasks[i].dept || mainView)) return;
+  state.tasks[i].subtasks[stIdx].done = !state.tasks[i].subtasks[stIdx].done; saveState(); render();
+}
+function updateSubtaskName(i, stIdx, val){
+  if (!requireDepartmentEditPermission(state.tasks[i].dept || mainView)) return;
+  state.tasks[i].subtasks[stIdx].name = val; saveState();
+}
+function deleteSubtask(i, stIdx){
+  if (!requireDepartmentEditPermission(state.tasks[i].dept || mainView)) return;
+  state.tasks[i].subtasks.splice(stIdx,1); saveState(); render();
+}
+function addSubtask(i){
+  if (!requireDepartmentEditPermission(state.tasks[i].dept || mainView)) return;
+  const inp = document.getElementById("newSub_" + i);
+  if(!inp || !inp.value.trim()) return;
+  if(!state.tasks[i].subtasks) state.tasks[i].subtasks = [];
+  state.tasks[i].subtasks.push({name: inp.value.trim(), done: false});
+  saveState(); render();
+}
+
+function render(){
+  renderMainNav();
+  renderLegend();
+  renderLoginControls();
+  if(mainView === 'schedule'){
+    document.getElementById("overallPct").textContent = scheduleProgress() + "%";
+    renderSchedule();
+  } else {
+    document.getElementById("overallPct").textContent = deptOverallProgress(mainView) + "%";
+    renderTabs();
+    renderSummary();
+    renderPanel();
+  }
+}
+
+fillDepartmentSelect();
+loadLoginState();
+loadState();
+startLiveSync();
+</script>
+</body>
+</html>
