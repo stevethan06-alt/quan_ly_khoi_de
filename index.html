@@ -225,28 +225,36 @@ function syncToGoogleSheet(deptId, panelCode, statusDesc) {
 
 function normalizeDepartmentId(value) {
   const text = String(value || "").trim().toLowerCase();
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d");
   const map = {
+    "phong thiet ke": "design",
     "phòng thiết kế": "design",
     "thiet ke": "design",
     "thiết kế": "design",
     "design": "design",
+    "phong thong ke": "boq",
     "phòng thống kê": "boq",
     "thong ke": "boq",
     "thống kê": "boq",
     "boq": "boq",
+    "phong qs": "qs",
     "phòng qs": "qs",
     "qs": "qs",
+    "phong mua hang": "purchase",
     "phòng mua hàng": "purchase",
     "mua hàng": "purchase",
     "purchase": "purchase",
-    "xưởng gia công": "workshop",
     "xuong gia cong": "workshop",
+    "xưởng gia công": "workshop",
     "workshop": "workshop",
+    "gia công": "workshop",
+    "phong thi cong": "sitework",
     "phòng thi công": "sitework",
     "thi cong": "sitework",
+    "thi công": "sitework",
     "sitework": "sitework"
   };
-  return map[text] || text;
+  return map[normalized] || map[text] || normalized || text;
 }
 
 function fillDepartmentSelect() {
