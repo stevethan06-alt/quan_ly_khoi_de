@@ -291,38 +291,13 @@ function updateUserBadge() {
   }
 }
 
-function saveLoginState() {
-  try {
-    localStorage.setItem(AUTH_KEY, JSON.stringify(currentUser));
-  } catch (e) {
-    console.log("Lưu session login lỗi", e);
-  }
-}
-
-function loadLoginState() {
-  try {
-    const raw = localStorage.getItem(AUTH_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.loggedIn) {
-      currentUser.loggedIn = true;
-      currentUser.user = parsed.user || "";
-      currentUser.name = parsed.name || parsed.user || "";
-      currentUser.department = parsed.department || "";
-      currentUser.departmentId = parsed.departmentId || normalizeDepartmentId(parsed.department || "");
-    }
-  } catch (e) {
-    console.log("Đọc session login lỗi", e);
-  }
-}
-
 function logoutCurrentUser() {
   currentUser.loggedIn = false;
   currentUser.user = "";
   currentUser.name = "";
   currentUser.department = "";
   currentUser.departmentId = "";
-  saveLoginState();
+  try { localStorage.removeItem(AUTH_KEY); } catch (e) {}
   updateUserBadge();
   const modal = document.getElementById("loginModal");
   if (modal) modal.classList.remove("hidden");
@@ -358,7 +333,7 @@ async function loginUser() {
     currentUser.name = result.name || result.user || user;
     currentUser.department = result.department || department;
     currentUser.departmentId = normalizeDepartmentId(result.departmentId || result.department || department);
-    saveLoginState();
+    try { localStorage.removeItem(AUTH_KEY); } catch (e) {}
     updateUserBadge();
 
     const modal = document.getElementById("loginModal");
@@ -1389,7 +1364,8 @@ function render(){
 }
 
 fillDepartmentSelect();
-loadLoginState();
+try { localStorage.removeItem(AUTH_KEY); } catch (e) {}
+document.getElementById("loginModal")?.classList.remove("hidden");
 loadState();
 startLiveSync();
 </script>
