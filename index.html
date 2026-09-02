@@ -602,6 +602,7 @@ let scheduleDeptFilter = "all";
 let syncTimer = null;
 let syncInProgress = false;
 let syncQueued = false;
+let cloudSyncPending = false;
 let liveSyncTimer = null;
 
 function freshPanel(code, qty, w=0, h=0){
@@ -658,6 +659,8 @@ function normalizeCloudState(rawData){
 
 // Hàm tải dữ liệu từ Google Sheet khi mở trang web
 async function loadState(){
+  if (cloudSyncPending || syncInProgress || syncQueued) return;
+
   const savedData = (() => {
     try { return localStorage.getItem(STORE_KEY); } catch (e) { return null; }
   })();
@@ -730,6 +733,7 @@ function startLiveSync(){
 function saveState(){
   if (!state || !state.elevations) return;
   state.updatedAt = Date.now();
+  cloudSyncPending = true;
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(state));
     queueCloudSync();
@@ -769,6 +773,8 @@ function flushCloudSync(){
     if (syncQueued) {
       syncQueued = false;
       queueCloudSync();
+    } else {
+      cloudSyncPending = false;
     }
   });
 }
