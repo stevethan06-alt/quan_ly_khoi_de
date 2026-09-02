@@ -644,7 +644,12 @@ function ensureStageDefaults(stage, deptId){
 }
 
 function defaultState(){
-  const s = { scheduleVersion: SCHEDULE_VERSION, elevations:{}, tasks: DEFAULT_TASKS.map(t=>({...t, subtasks: t.subtasks.map(st=>({...st}))})) };
+  const s = {
+    scheduleVersion: SCHEDULE_VERSION,
+    updatedAt: Date.now(),
+    elevations:{},
+    tasks: DEFAULT_TASKS.map(t=>({...t, subtasks: t.subtasks.map(st=>({...st}))}))
+  };
   ELEVATIONS.forEach(el=>{ s.elevations[el.id] = { panels: el.panels.map(p=>freshPanel(p.code,p.qty,p.w||0,p.h||0)) }; });
   return s;
 }
@@ -675,46 +680,58 @@ async function loadState(){
     try { return localStorage.getItem(STORE_KEY); } catch (e) { return null; }
   })();
 
+  let localState = null;
+  try {
+    if (savedData) {
+      localState = JSON.parse(savedData);
+      if (!localState || !localState.elevations) localState = null;
+    }
+  } catch (e) {
+    localState = null;
+  }
+
   try {
     if (GOOGLE_SHEET_WEB_APP_URL.startsWith("http")) {
       const response = await fetch(`${GOOGLE_SHEET_WEB_APP_URL}?_t=${Date.now()}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const cloudData = await response.json();
       const cloudState = normalizeCloudState(cloudData);
-      const hasRealCloudData = !!cloudState && (Object.keys(cloudState.elevations || {}).length > 0 || Array.isArray(cloudState.tasks) && cloudState.tasks.length > 0 || cloudState.scheduleVersion !== undefined);
+      const hasRealCloudData = !!cloudState && (
+        Object.keys(cloudState.elevations || {}).length > 0 ||
+        (Array.isArray(cloudState.tasks) && cloudState.tasks.length > 0) ||
+        cloudState.scheduleVersion !== undefined
+      );
 
       if (hasRealCloudData) {
-        const baseState = defaultState();
-        state = {
-          ...baseState,
-          ...cloudState,
-          scheduleVersion: SCHEDULE_VERSION,
-          elevations: {
-            ...baseState.elevations,
-            ...(cloudState.elevations || {})
-          },
-          tasks: Array.isArray(cloudState.tasks) && cloudState.tasks.length ? cloudState.tasks : baseState.tasks
-        };
-        try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
-        render();
-        return;
+        const remoteUpdatedAt = Number(cloudState.updatedAt || cloudState.savedAt || 0) || 0;
+        const localUpdatedAt = Number(localState && localState.updatedAt ? localState.updatedAt : 0) || 0;
+
+        if (remoteUpdatedAt > localUpdatedAt || !localState) {
+          const baseState = defaultState();
+          state = {
+            ...baseState,
+            ...cloudState,
+            updatedAt: remoteUpdatedAt || Date.now(),
+            scheduleVersion: SCHEDULE_VERSION,
+            elevations: {
+              ...baseState.elevations,
+              ...(cloudState.elevations || {})
+            },
+            tasks: Array.isArray(cloudState.tasks) && cloudState.tasks.length ? cloudState.tasks : baseState.tasks
+          };
+          try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+          render();
+          return;
+        }
       }
     }
   } catch (err) {
     console.log("Không tải được từ Cloud, dùng dữ liệu dưới máy:", err);
   }
 
-  try {
-    if (savedData) {
-      state = JSON.parse(savedData);
-      if (!state || !state.elevations) state = defaultState();
-    } else {
-      state = defaultState();
-      saveState();
-    }
-  } catch (e) {
-    state = defaultState();
-  }
+  state = localState || defaultState();
+  if (!state.updatedAt) state.updatedAt = Date.now();
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
   render();
 }
 
@@ -730,6 +747,7 @@ function startLiveSync(){
 // Hàm đẩy toàn bộ trạng thái lên Google Sheet khi có thay đổi
 function saveState(){
   if (!state || !state.elevations) return;
+  state.updatedAt = Date.now();
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(state));
     queueCloudSync();
